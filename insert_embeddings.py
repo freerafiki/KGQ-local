@@ -49,7 +49,7 @@ print("Fetching contributions and setting `todo` status")
 records, summary, keys = driver.execute_query("""
     MATCH (n:Contribution)
     WHERE n.embeddingStatus IS NULL
-    SET n.embeddingStatus = 'todo'
+    SET n.descrEmbeddingStatus = 'todo', n.titleEmbeddingStatus = 'todo', n.subtitleEmbeddingStatus = 'todo'
 """, database_=NEO4J_GRAPH, routing_=RoutingControl.WRITE)
 print(f"set status on {summary.counters.properties_set} nodes")   # should be ~2 * len(title_rows) (embedding + status)
 
