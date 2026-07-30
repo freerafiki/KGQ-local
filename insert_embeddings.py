@@ -9,10 +9,18 @@ In our case, we want to have embeddings for:
 
 """
 # embed only what needs to be embedded 
-from neo4j import GraphDatabase
+from neo4j import GraphDatabase, RoutingControl
 from sentence_transformers import SentenceTransformer
+from dotenv import load_dotenv
+import os 
 
-driver = GraphDatabase.driver("bolt://localhost:7687", auth=("neo4j", "password"))
+load_dotenv()
+# Neo4j connection
+NEO4J_URI=os.getenv('NEO4J_URI')
+NEO4J_USER=os.getenv('NEO4J_USER')
+NEO4J_PASSWORD=os.getenv('NEO4J_PASSWORD')
+NEO4J_GRAPH=os.getenv('NEO4J_GRAPH')
+driver = GraphDatabase.driver(NEO4J_URI, auth=(NEO4J_USER, NEO4J_PASSWORD))
 embedding_model = SentenceTransformer("BAAI/bge-m3")
 embedding_dims = 768
 
@@ -29,60 +37,116 @@ embedding_dims = 768
 # | (_| (_) | | | | |_| |  | | |_) | |_| | |_| | (_) | | | |
 #  \___\___/|_| |_|\__|_|  |_|_.__/ \__,_|\__|_|\___/|_| |_|
 #
+print("=" * 70)    
+print("Overview of contributions")
+records, summary, keys = driver.execute_query("""
+    MATCH (n:Contribution)
+    RETURN n
+""", database_=NEO4J_GRAPH, routing_=RoutingControl.READ)
+print(f"We have {len(records)} Contributions")
 
-with driver.session() as session:
-    result = session.run("""
-        MATCH (n:Contribution)
-        WHERE n.embedding IS NULL  -- Skip already-embedded nodes
-        RETURN n.id AS id, n.description AS desc, n.findings AS findings, n.officialTitle AS title, n.subtitle AS subtitle
-    """)
-    
+print("Fetching contributions and setting `todo` status")
+records, summary, keys = driver.execute_query("""
+    MATCH (n:Contribution)
+    WHERE n.embeddingStatus IS NULL
+    SET n.embeddingStatus = 'todo'
+""", database_=NEO4J_GRAPH, routing_=RoutingControl.WRITE)
+print(f"set status on {summary.counters.properties_set} nodes")   # should be ~2 * len(title_rows) (embedding + status)
+
+records, summary, keys = driver.execute_query("""
+    MATCH (n:Contribution)
+    WHERE n.embeddingStatus = 'todo'
+    RETURN n.id AS id, elementId(n) AS n4j_id, n.description AS desc, n.findings AS findings, n.officialTitle AS title, n.subtitle AS subtitle
+""", database_=NEO4J_GRAPH, routing_=RoutingControl.READ)
+print(f"Found {len(records)} contributions with `todo`")   # should be ~2 * len(title_rows) (embedding + status)
+
+
+print(f"Embedding contributions (we have {len(records)})")
 contributions_embeddings = []
-for row in result:
-
+for j, row in enumerate(records):
+    print(f"{j:03d}/{len(records)}", end='\r')
     r_id = row['id']
-    description_text = "Description: " + row["desc"] + ", Findings: " + row['findings']
-    title = row['title']
+    neo4j_id = row['n4j_id']
+    description_text = ""
+    if row['desc']:
+    	description_text += "Description: " + row["desc"] + ". "																									
+    if row['findings']:
+    	description_text += "Findings: " + row['findings']
+    if (not row['desc']) and (not row['findings']):																																										
+    	print(row)
+    	breakpoint()
+    new_contrib_emb = {
+    	'id':r_id,
+        'neo4j_id': neo4j_id,
+    	'descr_embedding':embedding_model.encode(description_text),
+    }
+    title = row['title']	
+    if title:
+    	new_contrib_emb['title_embedding'] = embedding_model.encode(title),
     subtitle = row['subtitle']
-    # contributions_to_embed.append((r_id, text_to_embed))
-    contributions_embeddings.append({
-        'id':r_id,
-        'descr_embedding':embedding_model.encode(description_text),
-        'title_embedding':embedding_model.encode(title),
-        'subtitle_embedding':embedding_model.encode(subtitle)
-    })
+    if subtitle:																													
+    	new_contrib_emb['subtitle_embedding'] = embedding_model.encode(subtitle),   
+    contributions_embeddings.append(new_contrib_emb)																																																																																																																																						
+
+descr_rows     = [r for r in contributions_embeddings if r.get("descr_embedding")     is not None]
+title_rows     = [r for r in contributions_embeddings if r.get("title_embedding")     is not None]
+subtitle_rows  = [r for r in contributions_embeddings if r.get("subtitle_embedding")  is not None]
     
-# Update Neo4j in transaction
-with driver.session() as session:
-    session.run("""
-        UNWIND $rows AS row
-        MATCH (n) WHERE elementId(n) = row.id
-        CALL db.create.setNodeVectorProperty(n, 'descrEmbedding', row.descr_embedding)
-        CALL db.create.setNodeVectorProperty(n, 'titleEmbedding', row.title_embedding)
-        CALL db.create.setNodeVectorProperty(n, 'subtitleEmbedding', row.subtitle_embedding)
-    """, rows=contributions_embeddings)
+print(f"Setting contributions node properties ({len(descr_rows)} descriptions, {len(title_rows)} titles and {len(subtitle_rows)} subtitles embedded)")
+# # Update Neo4j in transaction
+# with driver.session() as session:
+records, summary, keys = driver.execute_query("""
+    UNWIND $rows AS row
+	MATCH (n:Contribution) WHERE elementId(n) = row.neo4j_id
+    CALL db.create.setNodeVectorProperty(n, 'descrEmbedding', row.descr_embedding)
+    SET n.embeddingStatus = 'done'
+""", rows=descr_rows, database_=NEO4J_GRAPH, routing_=RoutingControl.WRITE)
+print(f"set status `done` on {summary.counters.properties_set} nodes")   # should be ~2 * len(title_rows) (embedding + status)
 
+records, summary, keys = driver.execute_query("""
+    UNWIND $rows AS row
+	MATCH (n:Contribution) WHERE elementId(n) = row.neo4j_id
+    CALL db.create.setNodeVectorProperty(n, 'titleEmbedding', row.title_embedding)
+    SET n.embeddingStatus = 'done'
+""", rows=title_rows, database_=NEO4J_GRAPH, routing_=RoutingControl.WRITE)
+print(f"set status `done` on {summary.counters.properties_set} nodes")   # should be ~2 * len(title_rows) (embedding + status)
+
+records, summary, keys = driver.execute_query("""
+    UNWIND $rows AS row
+	MATCH (n:Contribution) WHERE elementId(n) = row.neo4j_id
+    CALL db.create.setNodeVectorProperty(n, 'subtitleEmbedding', row.subtitle_embedding)
+    SET n.embeddingStatus = 'done'
+""", rows=subtitle_rows, database_=NEO4J_GRAPH, routing_=RoutingControl.WRITE)
+print(f"set status `done` on {summary.counters.properties_set} nodes")   # should be ~2 * len(title_rows) (embedding + status)
+
+
+
+# driver.execute_query("""
+#     UNWIND $rows AS row
+#     MATCH (n) WHERE elementId(n) = row.id
+#     CALL db.create.setNodeVectorProperty(n, 'descrEmbedding', row.descr_embedding)
+#     CALL db.create.setNodeVectorProperty(n, 'titleEmbedding', row.title_embedding)
+#     CALL db.create.setNodeVectorProperty(n, 'subtitleEmbedding', row.subtitle_embedding)
+#     SET n.embeddingStatus = 'done'
+# """, rows=contributions_embeddings)
+
+print("Creating index for contributions")
 ###### VECTOR INDEX 
-with driver.session() as session:
-    session.run("""
-        CREATE VECTOR INDEX description_embeddings IF NOT EXISTS
-        FOR (n:Contribution) ON (n.descrEmbedding)
-        OPTIONS {{ indexConfig: {{ `vector.dimensions`: $vec_dim, `vector.similarity_function`: $sim }} }}
-    """, vec_dim=embedding_dims, sim='cosine')
-
-with driver.session() as session:
-    session.run("""
-        CREATE VECTOR INDEX title_embeddings IF NOT EXISTS
-        FOR (n:Contribution) ON (n.titleEmbedding)
-        OPTIONS {{ indexConfig: {{ `vector.dimensions`: $vec_dim, `vector.similarity_function`: $sim }} }}
-    """, vec_dim=embedding_dims, sim='cosine')
-
-with driver.session() as session:
-    session.run("""
-        CREATE VECTOR INDEX subtitle_embeddings IF NOT EXISTS
-        FOR (n:Contribution) ON (n.subtitleEmbedding)
-        OPTIONS {{ indexConfig: {{ `vector.dimensions`: $vec_dim, `vector.similarity_function`: $sim }} }}
-    """, vec_dim=embedding_dims, sim='cosine')
+driver.execute_query("""
+    CREATE VECTOR INDEX description_embeddings IF NOT EXISTS
+    FOR (n:Contribution) ON (n.descrEmbedding)
+    OPTIONS { indexConfig: { `vector.dimensions`: $vec_dim, `vector.similarity_function`: $sim } }
+""", vec_dim=embedding_dims, sim='cosine', database_=NEO4J_GRAPH, routing_=RoutingControl.WRITE)
+driver.execute_query("""
+    CREATE VECTOR INDEX title_embeddings IF NOT EXISTS
+    FOR (n:Contribution) ON (n.titleEmbedding)
+    OPTIONS { indexConfig: { `vector.dimensions`: $vec_dim, `vector.similarity_function`: $sim } }
+""", vec_dim=embedding_dims, sim='cosine', database_=NEO4J_GRAPH, routing_=RoutingControl.WRITE)
+driver.execute_query("""
+    CREATE VECTOR INDEX subtitle_embeddings IF NOT EXISTS
+    FOR (n:Contribution) ON (n.subtitleEmbedding)
+    OPTIONS { indexConfig: { `vector.dimensions`: $vec_dim, `vector.similarity_function`: $sim } }
+""", vec_dim=embedding_dims, sim='cosine', database_=NEO4J_GRAPH, routing_=RoutingControl.WRITE)
 
 # ------------------------------------------------------------------
 # this would be a full-text index only for Contributions 
@@ -101,40 +165,64 @@ with driver.session() as session:
 #  | '__/ _ \/ __/ _ \| '_ ` _ \| '_ ` _ \ / _ \ '_ \ / _` |/ _` | __| |/ _ \| '_ \ 
 #  | | |  __/ (_| (_) | | | | | | | | | | |  __/ | | | (_| | (_| | |_| | (_) | | | |
 #  |_|  \___|\___\___/|_| |_| |_|_| |_| |_|\___|_| |_|\__,_|\__,_|\__|_|\___/|_| |_|
-#                                                                                   
+#          
+print("=" * 70)                                                                         
+print("Overview of Recommendations")
+records, summary, keys = driver.execute_query("""
+    MATCH (n:Recommendation)
+    RETURN n
+""", database_=NEO4J_GRAPH, routing_=RoutingControl.READ)
+print(f"We have {len(records)} Recommendations")
 
-with driver.session() as session:
-    result = session.run("""
-        MATCH (n:Recomendation)
-        WHERE n.embedding IS NULL  -- Skip already-embedded nodes
-        RETURN n.id AS id, n.content AS content, n.motivation as motivation
-    """)
-    
+print("Fetching recommendations")
+records, summary, keys = driver.execute_query("""
+    MATCH (n:Recommendation)
+    WHERE n.embeddingStatus IS NULL
+    SET n.embeddingStatus = 'todo'
+""", database_=NEO4J_GRAPH, routing_=RoutingControl.WRITE)
+print(f"set status on {summary.counters.properties_set} nodes")   # should be ~2 * len(title_rows) (embedding + status)
+
+records, summary, keys = driver.execute_query("""
+    MATCH (n:Recommendation)
+    WHERE n.embeddingStatus = 'todo'
+    RETURN n.id AS id, elementId(n) AS n4j_id, n.content AS content, n.motivation as motivation
+""", database_=NEO4J_GRAPH, routing_=RoutingControl.READ)
+print(f"Found {len(records)} Recommendations with `todo`")   # should be ~2 * len(title_rows) (embedding + status)
+
+print(f"Embedding recommendations (we have {len(records)})")
 recommendations_embeddings = []
-for row in result:
-
+for row in records:
     r_id = row['id']
-    text_to_embed = "Contenuto: " + row["content"] + ", Motivazione: " + row['motivation']
-    # contributions_to_embed.append((r_id, text_to_embed))
-    recommendations_embeddings.append({
-        'id':r_id,
-        'embedding':embedding_model.encode(text_to_embed)
-    })
-    
-# Update Neo4j in transaction
-with driver.session() as session:
-    session.run("""
-        UNWIND $rows AS row
-        MATCH (n) WHERE elementId(n) = row.id
-        CALL db.create.setNodeVectorProperty(n, 'embedding', row.embedding)
-    """, rows=recommendations_embeddings)
+    neo4j_id = row['n4j_id']
+    text_to_embed = ""
+    if row['content']:
+        text_to_embed += "Contenuto: " + row["content"] + ". "																									
+    if row['motivation']:
+        text_to_embed += "Findings: " + row['motivation']
+    if (not row['content']) and (not row['motivation']):
+        print(f"\tWARNING: We discard the recommendation:\n\t\t{row}\n\tBecause it does not have content")
+    if (row['content'] or row['motivation']):
+        recommendations_embeddings.append({
+            'id':r_id,
+            'neo4j_id': neo4j_id,
+            'embedding':embedding_model.encode(text_to_embed)
+        })
 
-with driver.session() as session:
-    session.run("""
-        CREATE VECTOR INDEX recomendation_embeddings IF NOT EXISTS
-        FOR (n:Contribution) ON (n.embedding)
-        OPTIONS {{ indexConfig: {{ `vector.dimensions`: $vec_dim, `vector.similarity_function`: $sim }} }}
-    """, vec_dim=embedding_dims, sim='cosine')
+print(f"Setting recommendations node properties ({len(recommendations_embeddings)} recommendations embedded)")
+records, summary, keys = driver.execute_query("""
+    UNWIND $rows AS row
+	MATCH (n:Recommendation) WHERE elementId(n) = row.neo4j_id
+    CALL db.create.setNodeVectorProperty(n, 'embedding', row.embedding)
+    SET n.embeddingStatus = 'done'
+""", rows=recommendations_embeddings, database_=NEO4J_GRAPH, routing_=RoutingControl.WRITE)
+print(f"set status `done` on {summary.counters.properties_set} nodes")   # should be ~2 * len(title_rows) (embedding + status)
+
+print("Creating index for recommendations")
+driver.execute_query("""
+    CREATE VECTOR INDEX recommendation_embeddings IF NOT EXISTS
+    FOR (n:Recommendation) ON (n.embedding)
+    OPTIONS { indexConfig: { `vector.dimensions`: $vec_dim, `vector.similarity_function`: $sim } }
+""", vec_dim=embedding_dims, sim='cosine', database_=NEO4J_GRAPH, routing_=RoutingControl.WRITE)
 
 #                     
 #    __ _  __ _ _ __  
@@ -142,39 +230,60 @@ with driver.session() as session:
 #  | (_| | (_| | |_) |
 #   \__, |\__,_| .__/ 
 #   |___/      |_|    
+print("=" * 70)    
+print("Overview of Gaps")
+records, summary, keys = driver.execute_query("""
+    MATCH (n:Gap)
+    RETURN n
+""", database_=NEO4J_GRAPH, routing_=RoutingControl.READ)
+print(f"We have {len(records)} Gaps")
 
-with driver.session() as session:
-    result = session.run("""
-        MATCH (n:Gap)
-        WHERE n.embedding IS NULL  -- Skip already-embedded nodes
-        RETURN n.id AS id, n.text AS text, n.#### as ####
-    """)
-    
+# print("Fetching recommendations")
+records, summary, keys = driver.execute_query("""
+    MATCH (n:Gap)
+    WHERE n.embeddingStatus IS NULL
+    SET n.embeddingStatus = 'todo'
+""", database_=NEO4J_GRAPH, routing_=RoutingControl.WRITE)
+print(f"set status on {summary.counters.properties_set} nodes")   # should be ~2 * len(title_rows) (embedding + status)
+
+records, summary, keys = driver.execute_query("""
+    MATCH (n:Gap)
+    WHERE n.embeddingStatus = 'todo'
+    RETURN n.id AS id, elementId(n) AS n4j_id, n.description AS description
+""", database_=NEO4J_GRAPH, routing_=RoutingControl.READ)
+print(f"Found {len(records)} Gaps with `todo`")   # should be ~2 * len(title_rows) (embedding + status)
+
+print(f"Embedding {len(records)} gaps")
 gap_embeddings = []
-for row in result:
-
+for row in records:
     r_id = row['id']
+    neo4j_id = row['n4j_id']
     text_to_embed = row["description"]
-    # contributions_to_embed.append((r_id, text_to_embed))
-    gap_embeddings.append({
-        'id':r_id,
-        'embedding':embedding_model.encode(text_to_embed)
-    })
-    
-# Update Neo4j in transaction
-with driver.session() as session:
-    session.run("""
-        UNWIND $rows AS row
-        MATCH (n) WHERE elementId(n) = row.id
-        CALL db.create.setNodeVectorProperty(n, 'embedding', row.embedding)
-    """, rows=gap_embeddings)
+    if text_to_embed:
+        gap_embeddings.append({
+			'id':r_id,
+            'neo4j_id': neo4j_id,
+			'embedding':embedding_model.encode(text_to_embed)
+		})
 
-with driver.session() as session:
-    session.run("""
-        CREATE VECTOR INDEX gap_embeddings IF NOT EXISTS
-        FOR (n:Contribution) ON (n.embedding)
-        OPTIONS {{ indexConfig: {{ `vector.dimensions`: $vec_dim, `vector.similarity_function`: $sim }} }}
-    """, vec_dim=embedding_dims, sim='cosine')
+print(f"Actually managed to embed {len(gap_embeddings)} gaps (others were empty)")
+print("Setting gaps node properties")
+# Update Neo4j in transaction
+records, summary, keys = driver.execute_query("""
+    UNWIND $rows AS row
+	MATCH (n:Gap) WHERE elementId(n) = row.neo4j_id
+    CALL db.create.setNodeVectorProperty(n, 'embedding', row.embedding)
+	SET n.embeddingStatus = 'done'
+""", rows=gap_embeddings, database_=NEO4J_GRAPH, routing_=RoutingControl.WRITE)
+print(f"set status `done` on {summary.counters.properties_set} nodes")   # should be ~2 * len(title_rows) (embedding + status)
+
+print("Creating index for gaps")
+driver.execute_query("""
+    CREATE VECTOR INDEX gap_embeddings IF NOT EXISTS
+    FOR (n:Contribution) ON (n.embedding)
+    OPTIONS { indexConfig: { `vector.dimensions`: $vec_dim, `vector.similarity_function`: $sim } }
+""", vec_dim=embedding_dims, sim='cosine', database_=NEO4J_GRAPH, routing_=RoutingControl.WRITE)
+
 
 
 
@@ -184,14 +293,16 @@ with driver.session() as session:
 #  |  _| |_| | | |_____| ||  __/>  <| |_ 
 #  |_|  \__,_|_|_|      \__\___/_/\_\\__|
 #   
-# ONE FULL-TEXT for all nodes together                                     
-with driver.session() as session:
-    session.run("""
-        CREATE FULLTEXT INDEX contribution_fulltext IF NOT EXISTS
-        FOR (n:Contribution|Recommendation|Gap)
-        ON EACH [n.officialTitle, n.subtitle, n.description, n.findings, n.content, n.motivation, n.description]
-    """)
+# ONE FULL-TEXT for all nodes together     
+print("=" * 70)    
+print("Creating index for full text")                                
+records, summary, keys = driver.execute_query("""
+    CREATE FULLTEXT INDEX contribution_fulltext IF NOT EXISTS
+    FOR (n:Contribution|Recommendation|Gap)
+    ON EACH [n.officialTitle, n.subtitle, n.description, n.findings, n.content, n.motivation]
+""", database_=NEO4J_GRAPH, routing_=RoutingControl.WRITE)
 
+print(f'Created index for {len(records)} ({summary.counters.properties_set} properties set)')
 
 #############################################################
 # CHUNK VERSION ?
