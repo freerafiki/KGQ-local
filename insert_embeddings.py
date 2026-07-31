@@ -1,3 +1,9 @@
+import os
+
+from dotenv import load_dotenv
+from neo4j import GraphDatabase, RoutingControl
+from sentence_transformers import SentenceTransformer
+
 """
 
 This code inserts the embedding into the desired node. 
@@ -8,11 +14,6 @@ In our case, we want to have embeddings for:
  - Projects
 
 """
-# embed only what needs to be embedded 
-from neo4j import GraphDatabase, RoutingControl
-from sentence_transformers import SentenceTransformer
-from dotenv import load_dotenv
-import os 
 
 load_dotenv()
 # Neo4j connection
@@ -48,87 +49,104 @@ print(f"We have {len(records)} Contributions")
 print("Fetching contributions and setting `todo` status")
 records, summary, keys = driver.execute_query("""
     MATCH (n:Contribution)
-    WHERE n.embeddingStatus IS NULL
-    SET n.descrEmbeddingStatus = 'todo', n.titleEmbeddingStatus = 'todo', n.subtitleEmbeddingStatus = 'todo'
+    WHERE n.descrEmbeddingStatus IS NULL
+    SET n.descrEmbeddingStatus = 'todo'
 """, database_=NEO4J_GRAPH, routing_=RoutingControl.WRITE)
-print(f"set status on {summary.counters.properties_set} nodes")   # should be ~2 * len(title_rows) (embedding + status)
+print(f"1. set descrEmbeddingStatus to `todo` on {summary.counters.properties_set} nodes")   # should be ~2 * len(title_rows) (embedding + status)
 
 records, summary, keys = driver.execute_query("""
     MATCH (n:Contribution)
-    WHERE n.embeddingStatus = 'todo'
-    RETURN n.id AS id, elementId(n) AS n4j_id, n.description AS desc, n.findings AS findings, n.officialTitle AS title, n.subtitle AS subtitle
+    WHERE n.titleEmbeddingStatus IS NULL
+    SET n.titleEmbeddingStatus = 'todo', n.subtitleEmbeddingStatus = 'todo'
+""", database_=NEO4J_GRAPH, routing_=RoutingControl.WRITE)
+print(f"2. set titleEmbeddingStatus to `todo` on {summary.counters.properties_set} nodes")   # should be ~2 * len(title_rows) (embedding + status)
+
+records, summary, keys = driver.execute_query("""
+    MATCH (n:Contribution)
+    WHERE n.subtitleEmbeddingStatus IS NULL
+    SET n.subtitleEmbeddingStatus = 'todo'
+""", database_=NEO4J_GRAPH, routing_=RoutingControl.WRITE)
+print(f"3. set subtitleEmbeddingStatus to `todo` on {summary.counters.properties_set} nodes")   # should be ~2 * len(title_rows) (embedding + status)
+
+
+print("done - now we fetch all the textual information, combine it and embed it")
+
+###############################3
+# DESCRIPTION
+demb_records, summary, keys = driver.execute_query("""
+    MATCH (n:Contribution)
+    WHERE n.descrEmbeddingStatus = 'todo'
+    RETURN n.id AS id, elementId(n) AS n4j_id, n.description AS desc, n.findings AS findings
 """, database_=NEO4J_GRAPH, routing_=RoutingControl.READ)
-print(f"Found {len(records)} contributions with `todo`")   # should be ~2 * len(title_rows) (embedding + status)
-
-
-print(f"Embedding contributions (we have {len(records)})")
-contributions_embeddings = []
+contributions_descr_embeddings = []
 for j, row in enumerate(records):
-    print(f"{j:03d}/{len(records)}", end='\r')
-    r_id = row['id']
-    neo4j_id = row['n4j_id']
     description_text = ""
     if row['desc']:
     	description_text += "Description: " + row["desc"] + ". "																									
     if row['findings']:
     	description_text += "Findings: " + row['findings']
-    if (not row['desc']) and (not row['findings']):																																										
-    	print(row)
-    	breakpoint()
-    new_contrib_emb = {
-    	'id':r_id,
-        'neo4j_id': neo4j_id,
+    if row['desc'] or row['findings']:
+        contributions_descr_embeddings.append({
+    	'id':row['id'],
+        'neo4j_id': row['n4j_id'],
     	'descr_embedding':embedding_model.encode(description_text),
-    }
-    title = row['title']	
-    if title:
-    	new_contrib_emb['title_embedding'] = embedding_model.encode(title),
-    subtitle = row['subtitle']
-    if subtitle:																													
-    	new_contrib_emb['subtitle_embedding'] = embedding_model.encode(subtitle),   
-    contributions_embeddings.append(new_contrib_emb)																																																																																																																																						
-
-descr_rows     = [r for r in contributions_embeddings if r.get("descr_embedding")     is not None]
-title_rows     = [r for r in contributions_embeddings if r.get("title_embedding")     is not None]
-subtitle_rows  = [r for r in contributions_embeddings if r.get("subtitle_embedding")  is not None]
-    
-print(f"Setting contributions node properties ({len(descr_rows)} descriptions, {len(title_rows)} titles and {len(subtitle_rows)} subtitles embedded)")
-# # Update Neo4j in transaction
-# with driver.session() as session:
-records, summary, keys = driver.execute_query("""
+    })
+print(f"Prepared {len(demb_records)} description embeddings for contributions")   # should be ~2 * len(title_rows) (embedding + status)
+done_descr_records, summary, keys = driver.execute_query("""
     UNWIND $rows AS row
 	MATCH (n:Contribution) WHERE elementId(n) = row.neo4j_id
     CALL db.create.setNodeVectorProperty(n, 'descrEmbedding', row.descr_embedding)
-    SET n.embeddingStatus = 'done'
-""", rows=descr_rows, database_=NEO4J_GRAPH, routing_=RoutingControl.WRITE)
-print(f"set status `done` on {summary.counters.properties_set} nodes")   # should be ~2 * len(title_rows) (embedding + status)
+    SET n.descrEmbeddingStatus = 'done'
+""", rows=contributions_descr_embeddings, database_=NEO4J_GRAPH, routing_=RoutingControl.WRITE)
+print(f"set status `done` for descrEmbeddingStatus on {summary.counters.properties_set} nodes")   # should be ~2 * len(title_rows) (embedding + status)
 
+###############################3
+# TITLE
+temb_records, summary, keys = driver.execute_query("""
+    MATCH (n:Contribution)
+    WHERE n.titleEmbeddingStatus = 'todo'
+    RETURN n.id AS id, elementId(n) AS n4j_id, n.officialTitle AS title
+""", database_=NEO4J_GRAPH, routing_=RoutingControl.READ)
+contributions_title_embeddings = []
+for j, row in enumerate(records):
+    if row['title']:
+        contributions_title_embeddings.append({
+    	'id':row['id'],
+        'neo4j_id': row['n4j_id'],
+    	'title_embedding':embedding_model.encode(row['title']),
+    })
+print(f"Prepared {len(temb_records)} title embeddings for contributions")   # should be ~2 * len(title_rows) (embedding + status)
 records, summary, keys = driver.execute_query("""
     UNWIND $rows AS row
 	MATCH (n:Contribution) WHERE elementId(n) = row.neo4j_id
     CALL db.create.setNodeVectorProperty(n, 'titleEmbedding', row.title_embedding)
-    SET n.embeddingStatus = 'done'
-""", rows=title_rows, database_=NEO4J_GRAPH, routing_=RoutingControl.WRITE)
-print(f"set status `done` on {summary.counters.properties_set} nodes")   # should be ~2 * len(title_rows) (embedding + status)
+    SET n.titleEmbeddingStatus = 'done'
+""", rows=contributions_title_embeddings, database_=NEO4J_GRAPH, routing_=RoutingControl.WRITE)
+print(f"set status `done` for titleEmbeddingStatus on {summary.counters.properties_set} nodes")   # should be ~2 * len(title_rows) (embedding + status)
 
+###############################3
+# SUBTITLE
+semb_records, summary, keys = driver.execute_query("""
+    MATCH (n:Contribution)
+    WHERE n.subtitleEmbeddingStatus = 'todo'
+    RETURN n.id AS id, elementId(n) AS n4j_id, n.subtitle AS subtitle
+""", database_=NEO4J_GRAPH, routing_=RoutingControl.READ)
+contributions_subtitle_embeddings = []
+for j, row in enumerate(records):
+    if row['subtitle']:
+        contributions_subtitle_embeddings.append({
+    	'id':row['id'],
+        'neo4j_id': row['n4j_id'],
+    	'subtitle_embedding':embedding_model.encode(row['subtitle']),
+    })
+print(f"Prepared {len(temb_records)} subtitle embeddings for contributions")   # should be ~2 * len(title_rows) (embedding + status)
 records, summary, keys = driver.execute_query("""
     UNWIND $rows AS row
 	MATCH (n:Contribution) WHERE elementId(n) = row.neo4j_id
     CALL db.create.setNodeVectorProperty(n, 'subtitleEmbedding', row.subtitle_embedding)
-    SET n.embeddingStatus = 'done'
-""", rows=subtitle_rows, database_=NEO4J_GRAPH, routing_=RoutingControl.WRITE)
-print(f"set status `done` on {summary.counters.properties_set} nodes")   # should be ~2 * len(title_rows) (embedding + status)
-
-
-
-# driver.execute_query("""
-#     UNWIND $rows AS row
-#     MATCH (n) WHERE elementId(n) = row.id
-#     CALL db.create.setNodeVectorProperty(n, 'descrEmbedding', row.descr_embedding)
-#     CALL db.create.setNodeVectorProperty(n, 'titleEmbedding', row.title_embedding)
-#     CALL db.create.setNodeVectorProperty(n, 'subtitleEmbedding', row.subtitle_embedding)
-#     SET n.embeddingStatus = 'done'
-# """, rows=contributions_embeddings)
+    SET n.subtitleEmbeddingStatus = 'done'
+""", rows=contributions_subtitle_embeddings, database_=NEO4J_GRAPH, routing_=RoutingControl.WRITE)
+print(f"set status `done` for subtitleEmbeddingStatus on {summary.counters.properties_set} nodes")   # should be ~2 * len(title_rows) (embedding + status)
 
 print("Creating index for contributions")
 ###### VECTOR INDEX 
