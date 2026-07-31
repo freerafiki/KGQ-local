@@ -151,17 +151,17 @@ print(f"set status `done` for subtitleEmbeddingStatus on {summary.counters.prope
 print("Creating index for contributions")
 ###### VECTOR INDEX 
 driver.execute_query("""
-    CREATE VECTOR INDEX description_embeddings IF NOT EXISTS
+    CREATE VECTOR INDEX description-embeddings IF NOT EXISTS
     FOR (n:Contribution) ON (n.descrEmbedding)
     OPTIONS { indexConfig: { `vector.dimensions`: $vec_dim, `vector.similarity_function`: $sim } }
 """, vec_dim=embedding_dims, sim='cosine', database_=NEO4J_GRAPH, routing_=RoutingControl.WRITE)
 driver.execute_query("""
-    CREATE VECTOR INDEX title_embeddings IF NOT EXISTS
+    CREATE VECTOR INDEX title-embeddings IF NOT EXISTS
     FOR (n:Contribution) ON (n.titleEmbedding)
     OPTIONS { indexConfig: { `vector.dimensions`: $vec_dim, `vector.similarity_function`: $sim } }
 """, vec_dim=embedding_dims, sim='cosine', database_=NEO4J_GRAPH, routing_=RoutingControl.WRITE)
 driver.execute_query("""
-    CREATE VECTOR INDEX subtitle_embeddings IF NOT EXISTS
+    CREATE VECTOR INDEX subtitle-embeddings IF NOT EXISTS
     FOR (n:Contribution) ON (n.subtitleEmbedding)
     OPTIONS { indexConfig: { `vector.dimensions`: $vec_dim, `vector.similarity_function`: $sim } }
 """, vec_dim=embedding_dims, sim='cosine', database_=NEO4J_GRAPH, routing_=RoutingControl.WRITE)
@@ -315,7 +315,7 @@ driver.execute_query("""
 print("=" * 70)    
 print("Creating index for full text")                                
 records, summary, keys = driver.execute_query("""
-    CREATE FULLTEXT INDEX contribution_fulltext IF NOT EXISTS
+    CREATE FULLTEXT INDEX search-fulltext IF NOT EXISTS
     FOR (n:Contribution|Recommendation|Gap)
     ON EACH [n.officialTitle, n.subtitle, n.description, n.findings, n.content, n.motivation]
 """, database_=NEO4J_GRAPH, routing_=RoutingControl.WRITE)
