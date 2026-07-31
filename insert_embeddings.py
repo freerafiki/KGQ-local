@@ -57,7 +57,7 @@ print(f"1. set descrEmbeddingStatus to `todo` on {summary.counters.properties_se
 records, summary, keys = driver.execute_query("""
     MATCH (n:Contribution)
     WHERE n.titleEmbeddingStatus IS NULL
-    SET n.titleEmbeddingStatus = 'todo', n.subtitleEmbeddingStatus = 'todo'
+    SET n.titleEmbeddingStatus = 'todo'
 """, database_=NEO4J_GRAPH, routing_=RoutingControl.WRITE)
 print(f"2. set titleEmbeddingStatus to `todo` on {summary.counters.properties_set} nodes")   # should be ~2 * len(title_rows) (embedding + status)
 
@@ -79,7 +79,7 @@ demb_records, summary, keys = driver.execute_query("""
     RETURN n.id AS id, elementId(n) AS n4j_id, n.description AS desc, n.findings AS findings
 """, database_=NEO4J_GRAPH, routing_=RoutingControl.READ)
 contributions_descr_embeddings = []
-for j, row in enumerate(records):
+for j, row in enumerate(demb_records):
     description_text = ""
     if row['desc']:
     	description_text += "Description: " + row["desc"] + ". "																									
@@ -91,7 +91,7 @@ for j, row in enumerate(records):
         'neo4j_id': row['n4j_id'],
     	'descr_embedding':embedding_model.encode(description_text),
     })
-print(f"Prepared {len(demb_records)} description embeddings for contributions")   # should be ~2 * len(title_rows) (embedding + status)
+print(f"Prepared {len(contributions_descr_embeddings)} title embeddings from {len(demb_records)} contributions")   # should be ~2 * len(title_rows) (embedding + status)
 done_descr_records, summary, keys = driver.execute_query("""
     UNWIND $rows AS row
 	MATCH (n:Contribution) WHERE elementId(n) = row.neo4j_id
@@ -108,14 +108,14 @@ temb_records, summary, keys = driver.execute_query("""
     RETURN n.id AS id, elementId(n) AS n4j_id, n.officialTitle AS title
 """, database_=NEO4J_GRAPH, routing_=RoutingControl.READ)
 contributions_title_embeddings = []
-for j, row in enumerate(records):
+for j, row in enumerate(temb_records):
     if row['title']:
         contributions_title_embeddings.append({
     	'id':row['id'],
         'neo4j_id': row['n4j_id'],
     	'title_embedding':embedding_model.encode(row['title']),
     })
-print(f"Prepared {len(temb_records)} title embeddings for contributions")   # should be ~2 * len(title_rows) (embedding + status)
+print(f"Prepared {len(contributions_title_embeddings)} title embeddings from {len(temb_records)} contributions")   # should be ~2 * len(title_rows) (embedding + status)
 records, summary, keys = driver.execute_query("""
     UNWIND $rows AS row
 	MATCH (n:Contribution) WHERE elementId(n) = row.neo4j_id
@@ -132,14 +132,14 @@ semb_records, summary, keys = driver.execute_query("""
     RETURN n.id AS id, elementId(n) AS n4j_id, n.subtitle AS subtitle
 """, database_=NEO4J_GRAPH, routing_=RoutingControl.READ)
 contributions_subtitle_embeddings = []
-for j, row in enumerate(records):
+for j, row in enumerate(semb_records):
     if row['subtitle']:
         contributions_subtitle_embeddings.append({
     	'id':row['id'],
         'neo4j_id': row['n4j_id'],
     	'subtitle_embedding':embedding_model.encode(row['subtitle']),
     })
-print(f"Prepared {len(temb_records)} subtitle embeddings for contributions")   # should be ~2 * len(title_rows) (embedding + status)
+print(f"Prepared {len(contributions_subtitle_embeddings)} title embeddings from {len(semb_records)} contributions")   # should be ~2 * len(title_rows) (embedding + status)
 records, summary, keys = driver.execute_query("""
     UNWIND $rows AS row
 	MATCH (n:Contribution) WHERE elementId(n) = row.neo4j_id
