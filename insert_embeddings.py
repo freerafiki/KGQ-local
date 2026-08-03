@@ -3,6 +3,7 @@ import os
 from dotenv import load_dotenv
 from neo4j import GraphDatabase, RoutingControl
 from sentence_transformers import SentenceTransformer
+from huggingface_hub import login
 
 """
 
@@ -16,14 +17,18 @@ In our case, we want to have embeddings for:
 """
 
 load_dotenv()
+token = os.getenv("HF_TOKEN")
+login(token=token)
 # Neo4j connection
 NEO4J_URI=os.getenv('NEO4J_URI')
 NEO4J_USER=os.getenv('NEO4J_USER')
 NEO4J_PASSWORD=os.getenv('NEO4J_PASSWORD')
 NEO4J_GRAPH=os.getenv('NEO4J_GRAPH')
 driver = GraphDatabase.driver(NEO4J_URI, auth=(NEO4J_USER, NEO4J_PASSWORD))
-embedding_model = SentenceTransformer("BAAI/bge-m3")
-embedding_dims = 768
+# embedding_model = SentenceTransformer("BAAI/bge-m3")
+# embedding_dims = 768
+embedding_model = SentenceTransformer("LiquidAI/LFM2.5-Embedding-350M")
+embedding_dims = 1024
 
 
 # 1. FETCH NODES 
@@ -71,7 +76,7 @@ print(f"3. set subtitleEmbeddingStatus to `todo` on {summary.counters.properties
 
 print("done - now we fetch all the textual information, combine it and embed it")
 
-###############################3
+###############################
 # DESCRIPTION
 demb_records, summary, keys = driver.execute_query("""
     MATCH (n:Contribution)
@@ -139,7 +144,7 @@ for j, row in enumerate(semb_records):
         'neo4j_id': row['n4j_id'],
     	'subtitle_embedding':embedding_model.encode(row['subtitle']),
     })
-print(f"Prepared {len(contributions_subtitle_embeddings)} title embeddings from {len(semb_records)} contributions")   # should be ~2 * len(title_rows) (embedding + status)
+print(f"Prepared {len(contributions_subtitle_embeddings)} subtitle embeddings from {len(semb_records)} contributions")   # should be ~2 * len(title_rows) (embedding + status)
 records, summary, keys = driver.execute_query("""
     UNWIND $rows AS row
 	MATCH (n:Contribution) WHERE elementId(n) = row.neo4j_id
@@ -150,18 +155,20 @@ print(f"set status `done` for subtitleEmbeddingStatus on {summary.counters.prope
 
 print("Creating index for contributions")
 ###### VECTOR INDEX 
-driver.execute_query("""
-    CREATE VECTOR INDEX description-embeddings IF NOT EXISTS
+_, summary, _ = driver.execute_query("""
+    CREATE VECTOR INDEX description_embeddings IF NOT EXISTS
     FOR (n:Contribution) ON (n.descrEmbedding)
     OPTIONS { indexConfig: { `vector.dimensions`: $vec_dim, `vector.similarity_function`: $sim } }
 """, vec_dim=embedding_dims, sim='cosine', database_=NEO4J_GRAPH, routing_=RoutingControl.WRITE)
+print(f"INDEX description_embeddings set on {summary.counters.properties_set} nodes")   # should be ~2 * len(title_rows) (embedding + status)
+
 driver.execute_query("""
-    CREATE VECTOR INDEX title-embeddings IF NOT EXISTS
+    CREATE VECTOR INDEX title_embeddings IF NOT EXISTS
     FOR (n:Contribution) ON (n.titleEmbedding)
     OPTIONS { indexConfig: { `vector.dimensions`: $vec_dim, `vector.similarity_function`: $sim } }
 """, vec_dim=embedding_dims, sim='cosine', database_=NEO4J_GRAPH, routing_=RoutingControl.WRITE)
 driver.execute_query("""
-    CREATE VECTOR INDEX subtitle-embeddings IF NOT EXISTS
+    CREATE VECTOR INDEX subtitle_embeddings IF NOT EXISTS
     FOR (n:Contribution) ON (n.subtitleEmbedding)
     OPTIONS { indexConfig: { `vector.dimensions`: $vec_dim, `vector.similarity_function`: $sim } }
 """, vec_dim=embedding_dims, sim='cosine', database_=NEO4J_GRAPH, routing_=RoutingControl.WRITE)
@@ -315,7 +322,7 @@ driver.execute_query("""
 print("=" * 70)    
 print("Creating index for full text")                                
 records, summary, keys = driver.execute_query("""
-    CREATE FULLTEXT INDEX search-fulltext IF NOT EXISTS
+    CREATE FULLTEXT INDEX search_fulltext IF NOT EXISTS
     FOR (n:Contribution|Recommendation|Gap)
     ON EACH [n.officialTitle, n.subtitle, n.description, n.findings, n.content, n.motivation]
 """, database_=NEO4J_GRAPH, routing_=RoutingControl.WRITE)
