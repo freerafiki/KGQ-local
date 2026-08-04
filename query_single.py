@@ -5,6 +5,7 @@ import time
 from dotenv import load_dotenv
 from neo4j import GraphDatabase, RoutingControl
 from sentence_transformers import SentenceTransformer
+from graph_helper import GraphHelper
 
 load_dotenv()
 # Neo4j connection
@@ -33,6 +34,9 @@ def main(args):
     driver = GraphDatabase.driver(NEO4J_URI, auth=(NEO4J_USER, NEO4J_PASSWORD))
 
     print(f"loaded model {embedding_model}")
+
+    # Connect
+    helper = GraphHelper(NEO4J_URI, NEO4J_USER, NEO4J_PASSWORD)
 
     # Time embedding generation
     start = time.time()
@@ -201,72 +205,38 @@ def main(args):
         else:
             print(f"\t{record['title']}\n\n\tdb_id={record['neo4j_id']}, submission_id={record['id']}\n\tTrovato in {record['sources']}")
 
-        records_neigh, summary_neigh, keys_neigh = driver.execute_query(f"""
-            MATCH (start {{id: $neo4j_id}})-[]-(neighbor)
-            RETURN neighbor;
-        """, neo4j_id=record['neo4j_id'], database_=NEO4J_GRAPH, routing_=RoutingControl.READ)
-        for record_neigh in records_neigh:
-            print(record_neigh)
+        # records_neigh, summary_neigh, keys_neigh = driver.execute_query(f"""
+        #     MATCH (start {{id: $neo4j_id}})-[]-(neighbor)
+        #     RETURN neighbor;
+        # """, neo4j_id=record['neo4j_id'], database_=NEO4J_GRAPH, routing_=RoutingControl.READ)
+        # for record_neigh in records_neigh:
+        #     print(record_neigh)
+
+        
+        # ===== USAGE EXAMPLES =====
+        # Get all outgoing neighbors
+        neighbors_all = helper.get_neighbors(node_id=record['neo4j_id'])
+        neighbors_all2 = helper.neighbours(node_id=record['neo4j_id'])
+        neighbors_rec = helper.neighbours(node_id=record['neo4j_id'], label_filter='Recommendation')
+        print(f"Got {len(neighbors_all)} neighbours (or {len(neighbors_all2)} with newer method), {len(neighbors_rec)} of which are recommendations")
+
+        # # Follow a specific relationship
+        contrib_content = helper.connected_via(node_id=record['neo4j_id'], rel_type="refers_to_content")
+        print(contrib_content)
+        # contrib_content = helper.follow_relationship(node_id=record['neo4j_id'], rel_type="refers_to_content")
+        # print(contrib_content)
+
+        # # Get 2-hop neighbors
+        # friends_of_friends = helper.get_n_hop_neighbors(node_id=record['neo4j_id'], max_hops=2)
+        # print(friends_of_friends)
+
         breakpoint()
+
     print("=" * 75)
 
 
-    # print("RECORDS")
-    # print(records)
-    # print("SUMMARY")
-    # print(summary.properties)
-    # print("KEYS")
-    # print(keys)
-
-#     cypher_query = f"""
-# LET
-#   query = $query,
-#   queryVector = $queryVector,
-#   structuralQueryVector = $structuralQueryVector,
-#   finalK = $finalK,
-#   rrfConstant = $rrfConstant,
-#   sourceWeights = $sourceWeights
-
-# CALL (query, queryVector, structuralQueryVector) {{
-#   CALL db.index.fulltext.queryNodes('result-text', query, {{limit: $sourceK})
-#   YIELD node AS result, score
-#   WITH result, score
-#   ORDER BY score DESC, result.id ASC
-#   WITH collect({{node: result, rawScore: score}) AS rows
-#   UNWIND CASE WHEN size(rows) = 0 THEN [] ELSE range(0, size(rows) - 1) END AS rankIndex
-#   RETURN
-#     rows[rankIndex].node AS result,
-#     'fulltext' AS source,
-#     rankIndex + 1 AS sourceRank,
-#     rows[rankIndex].rawScore AS rawScore
-
-#   UNION ALL
-# """
-
-
-    # with driver.session() as session:
-    #     res = session.run(f"""
-    #         CALL {{{ CALL db.index.vector.queryNodes('title_embeddings', 20, $q) YIELD node, score RETURN node, score AS titleScore, 0 AS bodyScore
-    #         UNION
-    #         CALL db.index.vector.queryNodes('body_embeddings', 20, $q) YIELD node, score RETURN node, 0 AS titleScore, score AS bodyScore }}
-    #         WITH node, max(titleScore) AS t, max(bodyScore) AS b
-    #         RETURN node, (t + b) AS combined ORDER BY combined DESC LIMIT $k
-            
-            
-    #         CALL db.index.vector.queryNodes('test_{name.replace('-','_')}', 5, $emb)
-    #         YIELD node, score
-    #         RETURN node.text, score
-    #     """, emb=query_embedding.tolist())
-        
-    #     hits = res.data()
-    #     elapsed_q = time.time() - start_q
-    #     print(f"Query search took {elapsed_q}:.1f seconds")
-
-    # print("Results:")
-    # for j, h in enumerate(hits):
-    #     print("result {j}") 
-    #     for hk in h:
-    #         print(f"{hk}: {h[hk]}")
+    # Close connection when done
+    helper.close()
 
 
 if __name__ == "__main__":
