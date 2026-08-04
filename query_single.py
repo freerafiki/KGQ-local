@@ -6,6 +6,7 @@ from dotenv import load_dotenv
 from neo4j import GraphDatabase, RoutingControl
 from sentence_transformers import SentenceTransformer
 from graph_helper import GraphHelper
+from query_config import chooseSourceWeights
 
 load_dotenv()
 # Neo4j connection
@@ -17,8 +18,6 @@ driver = GraphDatabase.driver(NEO4J_URI, auth=(NEO4J_USER, NEO4J_PASSWORD))
 embedding_model = SentenceTransformer("LiquidAI/LFM2.5-Embedding-350M")
 embedding_dims = 1024
 
-# embedding_model = SentenceTransformer("BAAI/bge-m3")
-# embedding_dims = 768
 
 # # Models to test (different dimensions!)  
 # test_models = {
@@ -28,6 +27,7 @@ embedding_dims = 1024
 #     "all-minilm-l6": {"model": "sentence-transformers/all-MiniLM-L6-v2", "dim": 384},
 #     "modernbert": {"model": "nomic-ai/modernbert-embed-base", "dim": 768},
 # }
+
 
 def main(args):
 
@@ -44,17 +44,8 @@ def main(args):
     elapsed = time.time() - start
     print(f"Embedding the query text took {elapsed:.3f} seconds")
 
+    sourceWeights_query = chooseSourceWeights(args.query)
     start_q = time.time()
-
-    # need to finish reading neo4j article
-    # https://neo4j.com/developer/genai-ecosystem/hybrid-search/
-
-    sourceWeights = {
-        'fulltext': 1.0,        
-        'OI_description': 1.0,  
-        'recommendation': 1.0,
-        'gap': 1.0
-    }
 
     records, summary, keys = driver.execute_query(f"""
     CYPHER 25
@@ -177,7 +168,7 @@ def main(args):
     row.wrrf AS wrrf
     ORDER BY row.wrrf DESC, row.result.id ASC;
 """, query=args.query, queryVector=query_embedding, shortQueryVector=query_embedding, longQueryVector=query_embedding, \
-     sourceK=10, finalK=20, rrfConstant=60, sourceWeights=sourceWeights, \
+     sourceK=10, finalK=20, rrfConstant=60, sourceWeights=sourceWeights_query, \
      database_=NEO4J_GRAPH, routing_=RoutingControl.READ)
 
     elapsed_q = time.time() - start_q
@@ -195,7 +186,7 @@ def main(args):
             record_type = "OI | Rac | Lac (full-text)"
         
         print("-" * 60)
-        print(f"RANK {j+1} - TYPE: {record_type} - SCORE: {record['wrrf']:.04f}")
+        print(f"RANK {j+1} - TYPE: {record.label} | {record_type} - SCORE: {record['wrrf']:.04f}")
         if record_type == "Oggetto Informativo":
             print(f"\t{record['title']}\n\n\tdb_id={record['neo4j_id']}, submission_id={record['id']}\n\tTrovato in {record['sources']}")
         elif record_type == "Raccomandazione":
@@ -205,20 +196,13 @@ def main(args):
         else:
             print(f"\t{record['title']}\n\n\tdb_id={record['neo4j_id']}, submission_id={record['id']}\n\tTrovato in {record['sources']}")
 
-        # records_neigh, summary_neigh, keys_neigh = driver.execute_query(f"""
-        #     MATCH (start {{id: $neo4j_id}})-[]-(neighbor)
-        #     RETURN neighbor;
-        # """, neo4j_id=record['neo4j_id'], database_=NEO4J_GRAPH, routing_=RoutingControl.READ)
-        # for record_neigh in records_neigh:
-        #     print(record_neigh)
 
         
         # ===== USAGE EXAMPLES =====
         # Get all outgoing neighbors
-        neighbors_all = helper.get_neighbors(node_id=record['neo4j_id'])
         neighbors_all2 = helper.neighbours(node_id=record['neo4j_id'])
         neighbors_rec = helper.neighbours(node_id=record['neo4j_id'], label_filter='Recommendation')
-        print(f"Got {len(neighbors_all)} neighbours (or {len(neighbors_all2)} with newer method), {len(neighbors_rec)} of which are recommendations")
+        print(f"Got {len(neighbors_all2)} neighbours, {len(neighbors_rec)} of which are recommendations")
 
         # # Follow a specific relationship
         contrib_content = helper.connected_via(node_id=record['neo4j_id'], rel_type="refers_to_content")
@@ -242,12 +226,7 @@ def main(args):
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Process CSV and .env file paths.")
     parser.add_argument("--query", "-Q", type=str, help="query to search")
-    # parser.add_argument("--model", "-M", type=str, choices=test_models.keys(), help="model to use for embedding")
     parser.add_argument("--env_file", "-env", type=str, default=".env", help="Path to the .env file (default: .env)")
-    # parser.add_argument("--reset", "-R", default=False, action='store_true', help="reset the database (clear)")
     parser.add_argument("--verbosity", "-V", default=1, type=int, help="verbosity level")
-    # parser.add_argument("--index", "-I", default=False, action='store_true', help="create indices")
     args = parser.parse_args()
-    # print(f"CSV file: {args.csv_file}")
-    print(f".env file: {args.env_file}")
     main(args)
