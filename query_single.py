@@ -158,6 +158,7 @@ def main(args):
 
     UNWIND limitedRows AS row
     RETURN
+    row.result AS n,
     row.result.title AS title,
     row.result.id AS id,
     row.result.content AS content,
@@ -185,8 +186,11 @@ def main(args):
         else: # full-text
             record_type = "OI | Rac | Lac (full-text)"
         
+        # breakpoint()
+        labels = list(record['n'].labels)
+        labels_text = ", ".join(labels)
         print("-" * 60)
-        print(f"RANK {j+1} - TYPE: {record.label} | {record_type} - SCORE: {record['wrrf']:.04f}")
+        print(f"RANK {j+1} - TYPE: {labels_text} | {record_type} - SCORE: {record['wrrf']:.04f}")
         if record_type == "Oggetto Informativo":
             print(f"\t{record['title']}\n\n\tdb_id={record['neo4j_id']}, submission_id={record['id']}\n\tTrovato in {record['sources']}")
         elif record_type == "Raccomandazione":
@@ -202,11 +206,11 @@ def main(args):
         # Get all outgoing neighbors
         neighbors_all2 = helper.neighbours(node_id=record['neo4j_id'])
         neighbors_rec = helper.neighbours(node_id=record['neo4j_id'], label_filter='Recommendation')
-        print(f"Got {len(neighbors_all2)} neighbours, {len(neighbors_rec)} of which are recommendations")
+        print(f"\tGot {len(neighbors_all2)} neighbours, {len(neighbors_rec)} of which are recommendations")
 
         # # Follow a specific relationship
         contrib_content = helper.connected_via(node_id=record['neo4j_id'], rel_type="refers_to_content")
-        print(contrib_content)
+        print(f"\tRelated contrib: {contrib_content}")
         # contrib_content = helper.follow_relationship(node_id=record['neo4j_id'], rel_type="refers_to_content")
         # print(contrib_content)
 
@@ -214,7 +218,7 @@ def main(args):
         # friends_of_friends = helper.get_n_hop_neighbors(node_id=record['neo4j_id'], max_hops=2)
         # print(friends_of_friends)
 
-        breakpoint()
+        # breakpoint()
 
     print("=" * 75)
 
