@@ -5,6 +5,9 @@ from neo4j import GraphDatabase, RoutingControl
 from sentence_transformers import SentenceTransformer
 from huggingface_hub import login
 
+
+
+
 """
 
 This code inserts the embedding into the desired node. 
@@ -29,6 +32,48 @@ driver = GraphDatabase.driver(NEO4J_URI, auth=(NEO4J_USER, NEO4J_PASSWORD))
 # embedding_dims = 768
 embedding_model = SentenceTransformer("LiquidAI/LFM2.5-Embedding-350M")
 embedding_dims = 1024
+# parameters 
+DROP_INDICES = True
+RESET_EMBEDDING_STATUS = False
+
+
+
+# Cleanup code 
+if DROP_INDICES:
+    print("***")
+    print("DROPPING THE INDICES")
+    print("***")
+    # Drop the incorrect/potentially stale indexes
+    records, summary, keys = driver.execute_query("""
+    DROP INDEX description_embeddings IF EXISTS;
+    """, database_=NEO4J_GRAPH, routing_=RoutingControl.WRITE)
+    records, summary, keys = driver.execute_query("""
+    DROP INDEX title_embeddings IF EXISTS;
+    """, database_=NEO4J_GRAPH, routing_=RoutingControl.WRITE)
+    records, summary, keys = driver.execute_query("""
+    DROP INDEX subtitle_embeddings IF EXISTS;
+    """, database_=NEO4J_GRAPH, routing_=RoutingControl.WRITE)
+    records, summary, keys = driver.execute_query("""
+    DROP INDEX recommendation_embeddings IF EXISTS;
+    """, database_=NEO4J_GRAPH, routing_=RoutingControl.WRITE)
+    records, summary, keys = driver.execute_query("""
+    DROP INDEX gap_embeddings IF EXISTS;
+    """, database_=NEO4J_GRAPH, routing_=RoutingControl.WRITE)
+    records, summary, keys = driver.execute_query("""
+    DROP INDEX search_fulltext IF EXISTS;
+    """, database_=NEO4J_GRAPH, routing_=RoutingControl.WRITE)
+
+    print("DONE")
+    print("***")
+
+if RESET_EMBEDDING_STATUS:
+    # Reset embedding status if we need to insert new embeddings
+    records, summary, keys = driver.execute_query("""
+    MATCH (n) WHERE n.descrEmbeddingStatus IS NOT NULL SET n.descrEmbeddingStatus = NULL;
+    MATCH (n) WHERE n.titleEmbeddingStatus IS NOT NULL SET n.titleEmbeddingStatus = NULL;
+    MATCH (n) WHERE n.subtitleEmbeddingStatus IS NOT NULL SET n.subtitleEmbeddingStatus = NULL;
+    MATCH (n) WHERE n.embeddingStatus IS NOT NULL SET n.embeddingStatus = NULL;
+    """, database_=NEO4J_GRAPH, routing_=RoutingControl.WRITE)
 
 
 # 1. FETCH NODES 
@@ -305,7 +350,7 @@ print(f"set status `done` on {summary.counters.properties_set} nodes")   # shoul
 print("Creating index for gaps")
 driver.execute_query("""
     CREATE VECTOR INDEX gap_embeddings IF NOT EXISTS
-    FOR (n:Contribution) ON (n.embedding)
+    FOR (n:Gap) ON (n.embedding)
     OPTIONS { indexConfig: { `vector.dimensions`: $vec_dim, `vector.similarity_function`: $sim } }
 """, vec_dim=embedding_dims, sim='cosine', database_=NEO4J_GRAPH, routing_=RoutingControl.WRITE)
 
@@ -326,6 +371,8 @@ records, summary, keys = driver.execute_query("""
     FOR (n:Contribution|Recommendation|Gap)
     ON EACH [n.officialTitle, n.subtitle, n.description, n.findings, n.content, n.motivation]
 """, database_=NEO4J_GRAPH, routing_=RoutingControl.WRITE)
+
+# campo degli autori e degli enti, stakeholder
 
 print(f'Created index for {len(records)} ({summary.counters.properties_set} properties set)')
 

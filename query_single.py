@@ -210,7 +210,7 @@ def main(args):
 
         # # Follow a specific relationship
         contrib_content = helper.connected_via(node_id=record['neo4j_id'], rel_type="refers_to_content")
-        print(f"\tRelated contrib: {contrib_content}")
+        # print(f"\tRelated contrib: {contrib_content}")
         # contrib_content = helper.follow_relationship(node_id=record['neo4j_id'], rel_type="refers_to_content")
         # print(contrib_content)
 
@@ -225,6 +225,53 @@ def main(args):
 
     # Close connection when done
     helper.close()
+
+    # Save results to JSON
+    import json
+    results_to_save = []
+    for record in records:
+        labels = list(record['n'].labels)
+        if "OI_description" in record['sources']:
+            record_type = "Oggetto Informativo"
+        elif "recommendation" in record['sources']:
+            record_type = "Raccomandazione"
+        elif "gap" in record['sources']:
+            record_type = "Lacuna"
+        else:
+            record_type = "Full-text"
+
+        entry = {
+            "type": record_type,
+            "labels": labels,
+            "wrrf_score": round(record['wrrf'], 4),
+            "sources": record['sources'],
+            "neo4j_id": record['neo4j_id']
+        }
+
+        if record_type == "Oggetto Informativo":
+            entry.update({"title": record['title'], "submission_id": record['id']})
+        elif record_type == "Raccomandazione":
+            entry.update({"content": record['content'], "motivation": record['motivation']})
+        elif record_type == "Lacuna":
+            entry.update({"description": record['description']})
+        else:
+            entry.update({"title": record['title'], "submission_id": record['id']})
+
+        results_to_save.append(entry)
+
+    output_data = {
+        "user_query": args.query,
+        "embedding_time_seconds": round(elapsed, 4),
+        "search_time_seconds": round(elapsed_q, 4),
+        "results": results_to_save
+    }
+
+    sanitized_query = args.query[:10].replace(" ", "_")
+    search_result_path = f'search_results_{sanitized_query}.json'
+    os.makedirs("results", exist_ok=True)
+    with open(os.path.join("results", search_result_path), 'w', encoding='utf-8') as f:
+        json.dump(output_data, f, indent=4, ensure_ascii=False)
+    print(f"\nSaved {len(results_to_save)} records to {search_result_path}")
 
 
 if __name__ == "__main__":
