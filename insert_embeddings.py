@@ -212,6 +212,7 @@ driver.execute_query("""
     FOR (n:Contribution) ON (n.titleEmbedding)
     OPTIONS { indexConfig: { `vector.dimensions`: $vec_dim, `vector.similarity_function`: $sim } }
 """, vec_dim=embedding_dims, sim='cosine', database_=NEO4J_GRAPH, routing_=RoutingControl.WRITE)
+
 driver.execute_query("""
     CREATE VECTOR INDEX subtitle_embeddings IF NOT EXISTS
     FOR (n:Contribution) ON (n.subtitleEmbedding)

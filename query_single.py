@@ -75,9 +75,9 @@ def main(args):
 
     MATCH (result:Contribution)
         SEARCH result IN (
-        VECTOR INDEX `description_embeddings`
-        FOR longQueryVector
-        LIMIT $sourceK
+            VECTOR INDEX `description_embeddings`
+            FOR longQueryVector
+            LIMIT $sourceK
         ) SCORE AS score
     WITH result, score
     ORDER BY score DESC, result.id ASC
@@ -91,11 +91,47 @@ def main(args):
 
     UNION ALL
 
+    MATCH (result:Contribution)
+        SEARCH result IN (
+            VECTOR INDEX `title_embeddings`
+            FOR longQueryVector
+            LIMIT $sourceK
+        ) SCORE AS score
+    WITH result, score
+    ORDER BY score DESC, result.id ASC
+    WITH collect({{node: result, rawScore: score}}) AS rows
+    UNWIND CASE WHEN size(rows) = 0 THEN [] ELSE range(0, size(rows) - 1) END AS rankIndex
+    RETURN
+        rows[rankIndex].node AS result,
+        'OI_title' AS source,
+        rankIndex + 1 AS sourceRank,
+        rows[rankIndex].rawScore AS rawScore
+
+    UNION ALL
+
+    MATCH (result:Contribution)
+        SEARCH result IN (
+            VECTOR INDEX `subtitle_embeddings`
+            FOR longQueryVector
+            LIMIT $sourceK
+        ) SCORE AS score
+    WITH result, score
+    ORDER BY score DESC, result.id ASC
+    WITH collect({{node: result, rawScore: score}}) AS rows
+    UNWIND CASE WHEN size(rows) = 0 THEN [] ELSE range(0, size(rows) - 1) END AS rankIndex
+    RETURN
+        rows[rankIndex].node AS result,
+        'OI_subtitle' AS source,
+        rankIndex + 1 AS sourceRank,
+        rows[rankIndex].rawScore AS rawScore
+
+    UNION ALL
+
     MATCH (result:Recommendation)
         SEARCH result IN (
-        VECTOR INDEX `recommendation_embeddings`
-        FOR queryVector
-        LIMIT $sourceK
+            VECTOR INDEX `recommendation_embeddings`
+            FOR queryVector
+            LIMIT $sourceK
         ) SCORE AS score
     WITH result, score
     ORDER BY score DESC, result.id ASC
@@ -108,12 +144,12 @@ def main(args):
         rows[rankIndex].rawScore AS rawScore
 
     UNION ALL
-
+            
     MATCH (result:Gap)
         SEARCH result IN (
-        VECTOR INDEX `gap_embeddings`
-        FOR queryVector
-        LIMIT $sourceK
+            VECTOR INDEX `gap_embeddings`
+            FOR queryVector
+            LIMIT $sourceK
         ) SCORE AS score
     WITH result, score
     ORDER BY score DESC, result.id ASC
@@ -158,15 +194,15 @@ def main(args):
 
     UNWIND limitedRows AS row
     RETURN
-    row.result AS n,
-    row.result.title AS title,
-    row.result.id AS id,
-    row.result.content AS content,
-    row.result.motivation AS motivation,
-    row.result.description AS description,
-    row.sources AS sources,
-    elementId(row.result) AS neo4j_id,
-    row.wrrf AS wrrf
+        row.result AS n,
+        row.result.title AS title,
+        row.result.id AS id,
+        row.result.content AS content,
+        row.result.motivation AS motivation,
+        row.result.description AS description,
+        row.sources AS sources,
+        elementId(row.result) AS neo4j_id,
+        row.wrrf AS wrrf
     ORDER BY row.wrrf DESC, row.result.id ASC;
 """, query=args.query, queryVector=query_embedding, shortQueryVector=query_embedding, longQueryVector=query_embedding, \
      sourceK=10, finalK=20, rrfConstant=60, sourceWeights=sourceWeights_query, \
@@ -274,6 +310,61 @@ def main(args):
     print(f"\nSaved {len(results_to_save)} records to {search_result_path}")
 
 
+# ### RERANKING!
+
+# from sentence_transformers import CrossEncoder
+
+# # Load once at startup alongside embedding_model
+# reranker = CrossEncoder("BAAI/bge-reranker-v2-m3")  # multilingual, handles Italian
+
+# # After your driver.execute_query call, before printing:
+# def rerank(query: str, records: list, text_field_priority=["title", "description", "content"]) -> list:
+#     """Rerank Neo4j results using a cross-encoder."""
+#     pairs = []
+#     for record in records:
+#         # Build the document text from whichever field is populated
+#         doc_text = next(
+#             (record[f] for f in text_field_priority if record.get(f)),
+#             ""
+#         )
+#         pairs.append((query, doc_text))
+    
+#     scores   = reranker.predict(pairs)
+#     reranked = sorted(
+#         zip(scores, records),
+#         key=lambda x: x[0],
+#         reverse=True
+#     )
+#     return [(score, record) for score, record in reranked]
+
+# # Usage
+# reranked_results = rerank(args.query, records)
+# for rank, (reranker_score, record) in enumerate(reranked_results):
+#     print(f"RANK {rank+1} | wRRF={record['wrrf']:.4f} | reranker={reranker_score:.4f}")
+
+
+"""
+## IDEA FOR including Reranking after extracting from the DB
+
+# Stage 1 — fast recall from Neo4j (bi-encoder, already built)
+candidates = hybrid_search.run(
+    query_text     = "sea level rise",
+    fulltext_index = "contribution_fulltext",
+    top_k          = 50,   # retrieve more than you need
+)
+
+# Stage 2 — rerank with cross-encoder or ColBERT (in Python, no DB)
+from sentence_transformers import CrossEncoder
+
+reranker   = CrossEncoder("cross-encoder/ms-marco-MiniLM-L-6-v2")
+pairs      = [(query, r.properties["name"]) for r in candidates]
+scores     = reranker.predict(pairs)
+
+# Sort by reranker score
+reranked   = sorted(zip(scores, candidates), key=lambda x: x[0], reverse=True)
+top_10     = [r for _, r in reranked[:10]]
+""" 
+
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Process CSV and .env file paths.")
     parser.add_argument("--query", "-Q", type=str, help="query to search")
@@ -281,3 +372,5 @@ if __name__ == "__main__":
     parser.add_argument("--verbosity", "-V", default=1, type=int, help="verbosity level")
     args = parser.parse_args()
     main(args)
+
+
