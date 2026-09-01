@@ -2,21 +2,16 @@ import os
 
 from dotenv import load_dotenv
 from neo4j import GraphDatabase, RoutingControl
-from sentence_transformers import SentenceTransformer
 from huggingface_hub import login
-
-
-
+from query_config import embedding_dims, embedding_model
 
 """
-
 This code inserts the embedding into the desired node. 
 In our case, we want to have embeddings for:
  - Contribution
  - recommendations
  - Gap
  - Projects
-
 """
 
 load_dotenv()
@@ -28,13 +23,9 @@ NEO4J_USER=os.getenv('NEO4J_USER')
 NEO4J_PASSWORD=os.getenv('NEO4J_PASSWORD')
 NEO4J_GRAPH=os.getenv('NEO4J_GRAPH')
 driver = GraphDatabase.driver(NEO4J_URI, auth=(NEO4J_USER, NEO4J_PASSWORD))
-# embedding_model = SentenceTransformer("BAAI/bge-m3")
-# embedding_dims = 768
-embedding_model = SentenceTransformer("LiquidAI/LFM2.5-Embedding-350M")
-embedding_dims = 1024
 # parameters 
 DROP_INDICES = True
-RESET_EMBEDDING_STATUS = False
+RESET_EMBEDDING_STATUS = True
 
 
 
@@ -67,14 +58,26 @@ if DROP_INDICES:
     print("***")
 
 if RESET_EMBEDDING_STATUS:
+
+    print("***")
+    print("RESET of the EMBEDDING")
+    print("***")
     # Reset embedding status if we need to insert new embeddings
     records, summary, keys = driver.execute_query("""
     MATCH (n) WHERE n.descrEmbeddingStatus IS NOT NULL SET n.descrEmbeddingStatus = NULL;
+    """, database_=NEO4J_GRAPH, routing_=RoutingControl.WRITE)
+    records, summary, keys = driver.execute_query("""
     MATCH (n) WHERE n.titleEmbeddingStatus IS NOT NULL SET n.titleEmbeddingStatus = NULL;
+    """, database_=NEO4J_GRAPH, routing_=RoutingControl.WRITE)
+    records, summary, keys = driver.execute_query("""
     MATCH (n) WHERE n.subtitleEmbeddingStatus IS NOT NULL SET n.subtitleEmbeddingStatus = NULL;
+    """, database_=NEO4J_GRAPH, routing_=RoutingControl.WRITE)
+    records, summary, keys = driver.execute_query("""
     MATCH (n) WHERE n.embeddingStatus IS NOT NULL SET n.embeddingStatus = NULL;
     """, database_=NEO4J_GRAPH, routing_=RoutingControl.WRITE)
 
+    print("DONE")
+    print("***")
 
 # 1. FETCH NODES 
 #

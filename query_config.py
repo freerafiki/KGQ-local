@@ -1,3 +1,10 @@
+# EMBEDDING MODEL 
+from sentence_transformers import SentenceTransformer
+
+embedding_model = SentenceTransformer("BAAI/bge-m3")
+embedding_dims = 1024
+
+
 sourceWeights_default = {
     'fulltext': 1.0,        
     'OI_description': 1.2,  
@@ -34,3 +41,4 @@ def chooseSourceWeights(query: str):
         return sourceWeights_default
     else:
         return sourceWeights_longText
+

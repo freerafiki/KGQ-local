@@ -1,0 +1,295 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>KGQ Search</title>
+  <style>
+    :root {
+      --accent: #1a73e8;
+      --accent-dark: #1765cc;
+      --border: #dadce0;
+      --muted: #5f6368;
+      --bg: #fff;
+      --card-border: #e1e4e8;
+      --oi: #1a73e8;
+      --rec: #188038;
+      --gap: #e37400;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: Arial, Helvetica, sans-serif;
+      background: var(--bg);
+      color: #202124;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      min-height: 100vh;
+      padding: 0 16px;
+    }
+    .container { width: 100%; max-width: 760px; margin-top: 12vh; }
+    .logo { text-align: center; font-size: 40px; letter-spacing: -1px; margin-bottom: 24px; font-weight: 400; }
+    .logo b { color: var(--accent); }
+    .logo .tag { font-size: 14px; font-weight: 400; letter-spacing: 0; color: var(--muted); margin-left: 4px; }
+    .searchbar {
+      display: flex; align-items: center; gap: 8px;
+      border: 1px solid var(--border); border-radius: 24px;
+      padding: 12px 18px; box-shadow: none; transition: box-shadow .2s, border-color .2s;
+    }
+    .searchbar:focus-within { box-shadow: 0 1px 6px rgba(32,33,36,.28); border-color: transparent; }
+    .searchbar input {
+      flex: 1; border: none; outline: none; font-size: 18px; background: transparent; min-width: 0;
+    }
+    .searchbar svg { fill: var(--accent); flex-shrink: 0; }
+    .btn {
+      border: none; border-radius: 6px; padding: 10px 20px; font-size: 14px; cursor: pointer;
+    }
+    .btn-primary { background: var(--accent); color: #fff; }
+    .btn-primary:hover { background: var(--accent-dark); }
+    .btn-primary:disabled { background: #a8c7fa; cursor: default; }
+    .row { display: flex; justify-content: space-between; align-items: center; margin-top: 14px; }
+    .adv-toggle { background: none; border: none; color: var(--accent); cursor: pointer; font-size: 14px; text-decoration: underline; }
+    .adv { padding: 12px; margin: 14px 0 0; border: 1px solid var(--card-border); border-radius: 8px; display: none; }
+    .adv.open { display: flex; gap: 16px; flex-wrap: wrap; }
+    .adv label { display: flex; flex-direction: column; font-size: 13px; color: var(--muted); }
+    .adv input { margin-top: 4px; width: 110px; padding: 6px; border: 1px solid var(--border); border-radius: 6px; font-size: 14px; }
+    .meta { color: var(--muted); font-size: 13px; margin: 18px 0 10px; }
+    .results { margin-top: 4px; }
+    .card {
+      border: 1px solid var(--card-border); border-radius: 10px; padding: 16px; margin-bottom: 14px;
+    }
+    .card-head { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; }
+    .name { font-size: 17px; font-weight: 600; color: var(--accent); }
+    .badge {
+      flex-shrink: 0; display: inline-block; min-width: 56px; text-align: center;
+      font-size: 11px; font-weight: 700; letter-spacing: .4px; text-transform: uppercase;
+      color: #fff; border-radius: 12px; padding: 3px 10px;
+    }
+    .badge.oi { background: var(--oi); }
+    .badge.rec { background: var(--rec); }
+    .badge.gap { background: var(--gap); }
+    .badge.ft { background: var(--muted); }
+    .preview {
+      color: #3c4043; font-size: 14px; line-height: 1.5; margin: 0 0 10px;
+      display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden;
+    }
+    .preview:empty { display: none; }
+    .full { display: none; margin-bottom: 10px; }
+    .full .field { color: #3c4043; font-size: 14px; line-height: 1.55; margin-bottom: 8px; }
+    .full .flabel { font-weight: 700; color: #202124; }
+    .card.open .full { display: block; }
+    .card.open .preview { display: none; }
+    .toggle {
+      background: none; border: none; color: var(--accent); cursor: pointer;
+      font-size: 14px; padding: 0; margin-bottom: 10px;
+    }
+    .toggle:hover { text-decoration: underline; }
+    .scores { font-size: 13px; color: var(--muted); background: #f8f9fa; border-radius: 6px; padding: 6px 10px; overflow-wrap: anywhere; }
+    .scores b { color: #202124; }
+    .empty, .error, .loading { color: var(--muted); text-align: center; padding: 24px 0; }
+    .error { color: #d93025; }
+    .id { font-size: 12px; color: #9aa0a6; margin-top: 6px; }
+    footer { margin: 40px 0 20px; font-size: 12px; color: #9aa0a6; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="logo"><b>VCDB</b> Search<sup class="tag">local prototype</sup></div>
+
+    <form id="search-form" autocomplete="off">
+      <div class="searchbar">
+        <svg focusable="false" height="20" viewBox="0 0 24 24" width="20">
+          <path d="M15.5 14h-.79l-.28-.27a6.5 6.5 0 1 0-.7.7l.27.28v.79l5 4.99L20.49 19zm-6 0A4.5 4.5 0 1 1 14 9.5 4.5 4.5 0 0 1 9.5 14z"></path>
+        </svg>
+        <input id="q" name="q" type="text" placeholder="Search the venice climate database..." aria-label="Search">
+        <button id="search-btn" class="btn btn-primary" type="submit">Search</button>
+      </div>
+
+      <div class="row">
+        <button type="button" id="adv-toggle" class="adv-toggle">Advanced parameters</button>
+      </div>
+      <div class="adv" id="adv">
+        <label>source_k
+          <input type="number" id="source_k" value="10" min="1">
+        </label>
+        <label>final_k
+          <input type="number" id="final_k" value="20" min="1">
+        </label>
+        <label>rrf_constant
+          <input type="number" id="rrf_constant" value="60" min="1">
+        </label>
+      </div>
+    </form>
+
+    <div id="meta" class="meta"></div>
+    <div id="results" class="results"></div>
+    <footer>Local KGQ search prototype</footer>
+  </div>
+
+  <script>
+    // API host derives from how the page was opened (localhost:8080 locally,
+    // http://<lan-ip>:8080 for visitors on the same network). Port stays 8000
+    // and must be reachable from wherever the page is accessed.
+    const API_BASE = location.protocol + '//' + location.hostname + ':8000';
+
+    const form       = document.getElementById('search-form');
+    const qInput     = document.getElementById('q');
+    const btn        = document.getElementById('search-btn');
+    const advToggle  = document.getElementById('adv-toggle');
+    const adv        = document.getElementById('adv');
+    const metaEl     = document.getElementById('meta');
+    const resultsEl  = document.getElementById('results');
+
+    const BADGE_CLASS = {
+      'Oggetto Informativo': 'oi',
+      'Raccomandazione':     'rec',
+      'Lacuna':              'gap',
+    };
+    const BADGE_SHORT = {
+      'Oggetto Informativo': 'OI',
+      'Raccomandazione':     'Rec',
+      'Lacuna':              'Gap',
+    };
+
+    advToggle.addEventListener('click', () => {
+      const open = adv.classList.toggle('open');
+      advToggle.textContent = open ? 'Hide advanced parameters' : 'Advanced parameters';
+    });
+    form.addEventListener('submit', (e) => { e.preventDefault(); search(); });
+
+    // Delegate show-more / show-less clicks (works for re-rendered cards).
+    resultsEl.addEventListener('click', (e) => {
+      const toggle = e.target.closest('.toggle');
+      if (!toggle) return;
+      const card = toggle.closest('.card');
+      const open = card.classList.toggle('open');
+      toggle.textContent = open ? 'Show less' : 'Show more';
+    });
+
+    async function search() {
+      const query = qInput.value.trim();
+      if (!query) { qInput.focus(); return; }
+
+      const payload = {
+        query,
+        source_k:    clampInt('source_k', 10),
+        final_k:     clampInt('final_k', 20),
+        rrf_constant: clampInt('rrf_constant', 60),
+      };
+
+      btn.disabled = true;
+      metaEl.textContent = '';
+      resultsEl.innerHTML = '<div class="loading">Searching\u2026</div>';
+
+      try {
+        const res = await fetch(API_BASE + '/search', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload),
+        });
+        if (!res.ok) throw new Error('HTTP ' + res.status + ' ' + res.statusText);
+        const data = await res.json();
+        render(query, data);
+      } catch (err) {
+        metaEl.textContent = '';
+        resultsEl.innerHTML = '<div class="error">Search failed: ' + escapeHtml(String(err.message || err)) + '</div>';
+      } finally {
+        btn.disabled = false;
+      }
+    }
+
+    function clampInt(id, fallback) {
+      const v = document.getElementById(id).valueAsNumber;
+      return Number.isFinite(v) && v >= 1 ? Math.round(v) : fallback;
+    }
+
+    // Fulltext raw scores are BM25-like and unbounded; normalize to 0-1
+    // relative to the best/worst in this batch (mirrors query_util.format_scores).
+    function ftBounds(results) {
+      const scores = [];
+      results.forEach(r => r.sources.forEach((s, i) => { if (s === 'fulltext') scores.push(r.rawScores[i]); }));
+      return scores.length ? [Math.min(...scores), Math.max(...scores)] : [0, 1];
+    }
+
+    function scoreText(r, ftMin, ftMax) {
+      const parts = [];
+      r.sources.forEach((src, i) => {
+        const rank = r.sourceRanks[i];
+        const score = r.rawScores[i];
+        if (src === 'fulltext' && ftMax > ftMin) {
+          const norm = (score - ftMin) / (ftMax - ftMin);
+          parts.push(src + '#' + rank + ': ' + norm.toFixed(4) + ' (' + score.toFixed(4) + ')');
+        } else {
+          parts.push(src + '#' + rank + ': ' + score.toFixed(4));
+        }
+      });
+      return parts.join(', ');
+    }
+
+    function nameOf(r) {
+      return r.title || r.content || r.description || 'Unnamed result';
+    }
+
+    // Preview is a truncated (CSS-clamped) glance; `.full` shows the whole text.
+    function previewText(r) {
+      if (r.type === 'Oggetto Informativo') return r.abstract || '';
+      if (r.type === 'Raccomandazione')    return r.content || r.title || '';
+      if (r.type === 'Lacuna')             return r.description || r.title || '';
+      return r.title || '';
+    }
+
+    function fullBody(r) {
+      if (r.type === 'Oggetto Informativo') {
+        return '<div class="field"><span class="flabel">Abstract:</span> ' + escapeHtml(r.abstract || '') + '</div>' +
+               '<div class="field"><span class="flabel">Findings:</span> ' + escapeHtml(r.findings || '') + '</div>';
+      }
+      if (r.type === 'Raccomandazione') {
+        return '<div class="field"><span class="flabel">Contenuto:</span> ' + escapeHtml(r.content || '') + '</div>' +
+               (r.motivation ? '<div class="field"><span class="flabel">Motivazione:</span> ' + escapeHtml(r.motivation) + '</div>' : '');
+      }
+      if (r.type === 'Lacuna') {
+        return '<div class="field"><span class="flabel">Descrizione:</span> ' + escapeHtml(r.description || '') + '</div>';
+      }
+      return '<div class="field">' + escapeHtml(nameOf(r)) + '</div>';
+    }
+
+    function render(query, data) {
+      const results = data.results || [];
+      const [ftMin, ftMax] = ftBounds(results);
+      metaEl.textContent =
+        '\u201C' + query + '\u201D \u00B7 ' + results.length + ' results \u00B7 ' +
+        (data.embedding_time_s ?? 0).toFixed(3) + 's embed \u00B7 ' +
+        (data.search_time_s ?? 0).toFixed(3) + 's search';
+
+      if (!results.length) {
+        resultsEl.innerHTML = '<div class="empty">No results found.</div>';
+        return;
+      }
+
+      resultsEl.innerHTML = results.map((r) => {
+        const badgeClass = BADGE_CLASS[r.type] || 'ft';
+        const badgeText  = BADGE_SHORT[r.type] || 'FT';
+        return '' +
+          '<div class="card">' +
+            '<div class="card-head">' +
+              '<span class="badge ' + badgeClass + '">' + badgeText + '</span>' +
+              '<span class="name">' + escapeHtml(nameOf(r)) + '</span>' +
+            '</div>' +
+            '<div class="preview">' + escapeHtml(previewText(r)) + '</div>' +
+            '<div class="full">' + fullBody(r) + '</div>' +
+            '<button type="button" class="toggle">Show more</button>' +
+            '<div class="scores"><b>WRRF ' + r.wrrf_score.toFixed(4) + '</b> | ' + scoreText(r, ftMin, ftMax) + '</div>' +
+            '<div class="id">db_id: ' + escapeHtml(r.neo4j_id) + '</div>' +
+          '</div>';
+      }).join('');
+    }
+
+    function escapeHtml(s) {
+      return String(s == null ? '' : s).replace(/[&<>"']/g, c => ({
+        '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;',
+      }[c]));
+    }
+  </script>
+</body>
+</html>
