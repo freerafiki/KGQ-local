@@ -11,7 +11,8 @@ sourceWeights_default = {
     'OI_title': 0.5,  
     'OI_subtitle': 0.8,  
     'recommendation': 1.0,
-    'gap': 1.0
+    'gap': 1.0,
+    'authors': 1.0,
 }
 sourceWeights_shortText = {
     'fulltext': 1.0,        
@@ -19,7 +20,8 @@ sourceWeights_shortText = {
     'OI_title': 1.0,  
     'OI_subtitle': 1.0,  
     'recommendation': 0.5,
-    'gap': 0.5
+    'gap': 0.5,
+    'authors': 1.0,
 }
 sourceWeights_longText = {
     'fulltext': 0.8,        
@@ -27,7 +29,8 @@ sourceWeights_longText = {
     'OI_title': 0.4,  
     'OI_subtitle': 0.6,  
     'recommendation': 1.5,
-    'gap': 1.5
+    'gap': 1.5,
+    'authors': 1.0,
 }
 def chooseSourceWeights(query: str):
     """

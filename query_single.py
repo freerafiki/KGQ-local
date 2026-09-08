@@ -7,11 +7,13 @@ from graph_helper import GraphHelper
 
 
 def main(args):
+    types = [t.strip() for t in args.types.split(",") if t.strip()] or None
     result = query_util.run_search(
         args.query,
         source_k=args.source_k,
         final_k=args.final_k,
         rrf_constant=args.rrf_constant,
+        types=types,
     )
     records = result['results']
     elapsed = result['embedding_time_s']
@@ -46,8 +48,12 @@ def main(args):
             print(f"\t{record['title']}\n\n\tdb_id={record['neo4j_id']}, submission_id={record['submission_id']}\n\tTrovato in {record['sources']}")
         elif record_type == "Raccomandazione":
             print(f"\tContenuto: {record['content']}\n\tMotivazione: {record['motivation']}\n\n\tdb_id={record['neo4j_id']}\n\tTrovato in {record['sources']}")
+            if record.get('parent_oi'):
+                print(f"\tOI: {record['parent_oi']['title']} (db_id={record['parent_oi']['neo4j_id']})")
         elif record_type == "Lacuna":
             print(f"\tDescrizione: {record['description']}\n\n\tdb_id={record['neo4j_id']}\n\tTrovato in {record['sources']}")
+            if record.get('parent_oi'):
+                print(f"\tOI: {record['parent_oi']['title']} (db_id={record['parent_oi']['neo4j_id']})")
         else:
             print(f"\t{record['title']}\n\n\tdb_id={record['neo4j_id']}, submission_id={record['submission_id']}\n\tTrovato in {record['sources']}")
 
@@ -89,6 +95,12 @@ if __name__ == "__main__":
     parser.add_argument("--source_k", type=int, default=10, help="candidates pulled per source")
     parser.add_argument("--final_k", type=int, default=20, help="final merged results to return")
     parser.add_argument("--rrf_constant", type=int, default=60, help="wRRF denominator offset")
+    parser.add_argument(
+        "--types",
+        type=str,
+        default="",
+        help="comma-separated node labels to restrict to, e.g. 'Contribution,Gap' (default: all types)",
+    )
     args = parser.parse_args()
     main(args)
 

@@ -17,6 +17,7 @@
       --gap: #e37400;
     }
     * { box-sizing: border-box; }
+    html, body { height: 100%; }
     body {
       margin: 0;
       font-family: Arial, Helvetica, sans-serif;
@@ -25,11 +26,16 @@
       display: flex;
       flex-direction: column;
       align-items: center;
-      min-height: 100vh;
+      height: 100vh;
+      overflow: hidden;
       padding: 0 16px;
     }
-    .container { width: 100%; max-width: 760px; margin-top: 12vh; }
-    .logo { text-align: center; font-size: 40px; letter-spacing: -1px; margin-bottom: 24px; font-weight: 400; }
+    .container {
+      display: flex; flex-direction: column;
+      width: 100%; max-width: 1000px; height: 100%;
+      margin: 0 auto;
+    }
+    .logo { text-align: center; font-size: 28px; letter-spacing: -1px; margin: 18px 0 14px; font-weight: 400; flex: 0 0 auto; }
     .logo b { color: var(--accent); }
     .logo .tag { font-size: 14px; font-weight: 400; letter-spacing: 0; color: var(--muted); margin-left: 4px; }
     .searchbar {
@@ -48,13 +54,46 @@
     .btn-primary { background: var(--accent); color: #fff; }
     .btn-primary:hover { background: var(--accent-dark); }
     .btn-primary:disabled { background: #a8c7fa; cursor: default; }
-    .row { display: flex; justify-content: space-between; align-items: center; margin-top: 14px; }
-    .adv-toggle { background: none; border: none; color: var(--accent); cursor: pointer; font-size: 14px; text-decoration: underline; }
-    .adv { padding: 12px; margin: 14px 0 0; border: 1px solid var(--card-border); border-radius: 8px; display: none; }
-    .adv.open { display: flex; gap: 16px; flex-wrap: wrap; }
-    .adv label { display: flex; flex-direction: column; font-size: 13px; color: var(--muted); }
-    .adv input { margin-top: 4px; width: 110px; padding: 6px; border: 1px solid var(--border); border-radius: 6px; font-size: 14px; }
-    .meta { color: var(--muted); font-size: 13px; margin: 18px 0 10px; }
+    .layout { flex: 1 1 auto; min-height: 0; display: flex; gap: 28px; margin-top: 24px; padding: 0 0 16px; }
+    .col-filters { flex: 0 0 24%; min-width: 0; overflow: hidden; }
+    .col-results { flex: 1 1 auto; min-width: 0; overflow-y: auto; }
+    .panel-title { margin: 0 2px 4px; font-size: 16px; font-weight: 700; }
+    .section-title { margin: 0 0 4px; font-size: 16px; font-weight: 700; }
+    .filter-panel {
+      padding: 12px 14px 6px; border: 1px solid var(--card-border); border-radius: 10px;
+    }
+    .filter-group { border-top: 1px solid var(--card-border); }
+    .filter-group summary {
+      list-style: none; cursor: pointer; user-select: none;
+      font-size: 13px; color: var(--muted); text-transform: uppercase; letter-spacing: .5px; font-weight: 700;
+      padding: 10px 0; display: flex; justify-content: space-between; align-items: center;
+    }
+    .filter-group summary::-webkit-details-marker { display: none; }
+    .filter-group summary::after { content: "\25B6"; font-size: 10px; transition: transform .2s; }
+    .filter-group[open] summary::after { transform: rotate(90deg); }
+    .group-body { padding: 2px 0 12px; }
+    .adv-body label { display: flex; flex-direction: column; font-size: 13px; color: var(--muted); margin-bottom: 8px; }
+    .adv-body input { margin-top: 4px; width: 110px; padding: 6px; border: 1px solid var(--border); border-radius: 6px; font-size: 14px; }
+    .actor-input { width: 100%; padding: 7px 10px; border: 1px solid var(--border); border-radius: 6px; font-size: 14px; }
+    .actor-input::placeholder { color: #9aa0a6; }
+    .actor-list { max-height: 160px; overflow-y: auto; border: 1px solid var(--border); border-radius: 6px; margin-top: 8px; }
+    .actor-item { display: flex; align-items: center; gap: 8px; padding: 6px 10px; font-size: 13px; cursor: pointer; }
+    .actor-item:hover { background: #f1f3f4; }
+    .actor-item input { accent-color: var(--accent); cursor: pointer; }
+    .actor-empty { padding: 8px 10px; font-size: 13px; color: var(--muted); }
+    .actor-chips { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+    .chip { display: inline-flex; align-items: center; gap: 6px; background: #e8f0fe; color: #174ea6; font-size: 12px; padding: 3px 8px; border-radius: 12px; }
+    .chip button { background: none; border: none; cursor: pointer; color: #174ea6; font-size: 13px; line-height: 1; padding: 0; }
+    .chk {
+      display: flex; align-items: center; gap: 10px; font-size: 15px; cursor: pointer;
+      padding: 7px 0; color: #202124;
+    }
+    .chk input { width: 16px; height: 16px; accent-color: var(--accent); cursor: pointer; }
+    .dot { width: 12px; height: 12px; border-radius: 50%; flex-shrink: 0; display: inline-block; }
+    .dot.oi { background: var(--oi); }
+    .dot.rec { background: var(--rec); }
+    .dot.gap { background: var(--gap); }
+    .meta { color: var(--muted); font-size: 13px; margin: 0 0 10px; }
     .results { margin-top: 4px; }
     .card {
       border: 1px solid var(--card-border); border-radius: 10px; padding: 16px; margin-bottom: 14px;
@@ -87,6 +126,14 @@
     .toggle:hover { text-decoration: underline; }
     .scores { font-size: 13px; color: var(--muted); background: #f8f9fa; border-radius: 6px; padding: 6px 10px; overflow-wrap: anywhere; }
     .scores b { color: #202124; }
+    .purpose-row { font-size: 13px; color: var(--muted); margin-top: 8px; }
+    .purpose-row .plabel { color: #202124; font-weight: 700; }
+    .contributors-row { font-size: 13px; color: var(--muted); margin-top: 8px; }
+    .contributors-row .plabel { color: #202124; font-weight: 700; }
+    .parent-row { font-size: 13px; color: var(--muted); margin-top: 8px; }
+    .parent-row .plabel { color: #202124; font-weight: 700; }
+    .purpose-row .tag { display: inline-block; margin-right: 6px; }
+    .purpose-row .tag::before { content: ""; display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 4px; background: var(--accent); vertical-align: baseline; }
     .empty, .error, .loading { color: var(--muted); text-align: center; padding: 24px 0; }
     .error { color: #d93025; }
     .id { font-size: 12px; color: #9aa0a6; margin-top: 6px; }
@@ -105,41 +152,86 @@
         <input id="q" name="q" type="text" placeholder="Search the venice climate database..." aria-label="Search">
         <button id="search-btn" class="btn btn-primary" type="submit">Search</button>
       </div>
-
-      <div class="row">
-        <button type="button" id="adv-toggle" class="adv-toggle">Advanced parameters</button>
-      </div>
-      <div class="adv" id="adv">
-        <label>source_k
-          <input type="number" id="source_k" value="10" min="1">
-        </label>
-        <label>final_k
-          <input type="number" id="final_k" value="20" min="1">
-        </label>
-        <label>rrf_constant
-          <input type="number" id="rrf_constant" value="60" min="1">
-        </label>
-      </div>
     </form>
 
-    <div id="meta" class="meta"></div>
-    <div id="results" class="results"></div>
-    <footer>Local KGQ search prototype</footer>
+    <div class="layout">
+      <aside class="col-filters">
+        <div class="filter-panel">
+          <h3 class="panel-title">Filters</h3>
+
+          <details class="filter-group" id="type-group">
+            <summary>Doc Type</summary>
+            <div class="group-body">
+              <label class="chk"><input type="checkbox" id="f-contrib" value="Contribution" checked> <span class="dot oi"></span> Oggetto Informativo (OI)</label>
+              <label class="chk"><input type="checkbox" id="f-rec" value="Recommendation" checked> <span class="dot rec"></span> Raccomandazioni (Rec)</label>
+              <label class="chk"><input type="checkbox" id="f-gap" value="Gap" checked> <span class="dot gap"></span> Lacune (Gap)</label>
+            </div>
+          </details>
+
+          <details class="filter-group" id="purpose-group">
+            <summary>Main Purpose</summary>
+            <div class="group-body">
+              <label class="chk"><input type="checkbox" value="Valutazione" checked> Valutazione</label>
+              <label class="chk"><input type="checkbox" value="Monitoraggio" checked> Monitoraggio</label>
+              <label class="chk"><input type="checkbox" value="Ricostruzione" checked> Ricostruzione</label>
+              <label class="chk"><input type="checkbox" value="Previsione" checked> Previsione</label>
+              <label class="chk"><input type="checkbox" value="Supporto decisioni" checked> Supporto decisioni</label>
+              <label class="chk"><input type="checkbox" value="Governance" checked> Governance</label>
+              <label class="chk"><input type="checkbox" value="Gap di conoscenza" checked> Gap di conoscenza</label>
+            </div>
+          </details>
+
+          <details class="filter-group" id="actor-group">
+            <summary>Contributor</summary>
+            <div class="group-body">
+              <input type="text" id="actor-input" class="actor-input" placeholder="Type to filter\u2026" autocomplete="off">
+              <div id="actor-list" class="actor-list"></div>
+              <div id="actor-chips" class="actor-chips"></div>
+            </div>
+          </details>
+
+          <details class="filter-group" id="adv-group">
+            <summary>Advanced parameters</summary>
+            <div class="group-body adv-body">
+              <label>source_k
+                <input type="number" id="source_k" value="10" min="1">
+              </label>
+              <label>final_k
+                <input type="number" id="final_k" value="20" min="1">
+              </label>
+              <label>rrf_constant
+                <input type="number" id="rrf_constant" value="60" min="1">
+              </label>
+            </div>
+          </details>
+        </div>
+      </aside>
+
+      <section class="col-results">
+        <h3 class="section-title">Results</h3>
+        <div id="meta" class="meta"></div>
+        <div id="results" class="results"></div>
+        <footer>Local KGQ search prototype</footer>
+      </section>
+    </div>
   </div>
 
   <script>
-    // API host derives from how the page was opened (localhost:8080 locally,
-    // http://<lan-ip>:8080 for visitors on the same network). Port stays 8000
+    // API host derives from how the page was opened (localhost:28080 locally,
+    // http:<LAN ip>:28080 for visitors on the same network). Port stays 28000
     // and must be reachable from wherever the page is accessed.
-    const API_BASE = location.protocol + '//' + location.hostname + ':8000';
+    const API_BASE = location.protocol + '//' + location.hostname + ':28000';
 
     const form       = document.getElementById('search-form');
     const qInput     = document.getElementById('q');
     const btn        = document.getElementById('search-btn');
-    const advToggle  = document.getElementById('adv-toggle');
-    const adv        = document.getElementById('adv');
     const metaEl     = document.getElementById('meta');
     const resultsEl  = document.getElementById('results');
+    const filterCheckboxes = document.querySelectorAll('#type-group .chk input');
+    const purposeCheckboxes = document.querySelectorAll('#purpose-group .chk input');
+    const actorInput  = document.getElementById('actor-input');
+    const actorListEl  = document.getElementById('actor-list');
+    const actorChipsEl = document.getElementById('actor-chips');
 
     const BADGE_CLASS = {
       'Oggetto Informativo': 'oi',
@@ -151,12 +243,118 @@
       'Raccomandazione':     'Rec',
       'Lacuna':              'Gap',
     };
+    const FILTER_TO_TYPE = {
+      'Contribution':    'Oggetto Informativo',
+      'Recommendation':  'Raccomandazione',
+      'Gap':             'Lacuna',
+    };
 
-    advToggle.addEventListener('click', () => {
-      const open = adv.classList.toggle('open');
-      advToggle.textContent = open ? 'Hide advanced parameters' : 'Advanced parameters';
-    });
+    let allResults = [];
+    let lastQuery  = '';
+    let selectedActors = new Set();
+    let actorNames = [];
+
     form.addEventListener('submit', (e) => { e.preventDefault(); search(); });
+
+    // Toggling a filter re-filters the ALREADY-FETCHED results locally, no
+    // round trip to the API. Unchecked = excluded; all default to checked so
+    // unchecking one hides results carrying that tag.
+    filterCheckboxes.forEach(cb => cb.addEventListener('change', renderFiltered));
+    purposeCheckboxes.forEach(cb => cb.addEventListener('change', renderFiltered));
+    actorInput.addEventListener('input', () => { renderActorList(); renderFiltered(); });
+
+    function activeFilterTypes() {
+      return Array.from(filterCheckboxes)
+        .filter(cb => cb.checked)
+        .map(cb => FILTER_TO_TYPE[cb.value]);
+    }
+
+    function activePurposes() {
+      return Array.from(purposeCheckboxes)
+        .filter(cb => cb.checked)
+        .map(cb => cb.value);
+    }
+
+    // Whitelist semantics per axis: a result survives if it carries at least
+    // one active tag. Results with NO tags on an axis (e.g. a Rec/Gap with no
+    // purpose) are "untagged" and always pass that axis.
+    function passesAxis(tags, active) {
+      if (!tags.length) return true;
+      if (!active.length) return false;
+      return tags.some(t => active.includes(t));
+    }
+
+    function renderFiltered() {
+      if (!lastQuery) return;
+      const typeActive = activeFilterTypes();
+      const purposeActive = activePurposes();
+      const actorQuery = actorInput.value.trim().toLowerCase();
+      const selected = Array.from(selectedActors);
+      const visible = allResults.filter(r =>
+        passesAxis([r.type], typeActive) &&
+        passesAxis(r.purposes || [], purposeActive) &&
+        passesActorFilter(r.actors || [], actorQuery, selected)
+      );
+      render(visible, { all: allResults });
+    }
+
+    // Both constraints apply when set: a live-typed query (substring) and the
+    // selected list entries (OR-ed, result must carry at least one of them).
+    function passesActorFilter(actors, query, selected) {
+      if (query && !actors.some(a => a.toLowerCase().includes(query))) return false;
+      if (selected.length && !selected.some(s => actors.includes(s))) return false;
+      return true;
+    }
+
+    function seedActorList(results) {
+      const names = [];
+      results.forEach(r => (r.actors || []).forEach(a => { if (!names.includes(a)) names.push(a); }));
+      actorNames = names.sort((a, b) => a.localeCompare(b));
+      selectedActors = new Set(Array.from(selectedActors).filter(s => actorNames.includes(s)));
+      renderActorList();
+      renderChips();
+    }
+
+    function renderActorList() {
+      const q = actorInput.value.trim().toLowerCase();
+      const matches = q ? actorNames.filter(n => n.toLowerCase().includes(q)) : actorNames;
+      if (!matches.length) {
+        actorListEl.innerHTML = '<div class="actor-empty">No matching contributors.</div>';
+        return;
+      }
+      actorListEl.innerHTML = matches.map(n =>
+        '<label class="actor-item"><input type="checkbox" value="' + escapeHtml(n) + '"' +
+        (selectedActors.has(n) ? ' checked' : '') + '> ' + escapeHtml(n) + '</label>'
+      ).join('');
+    }
+
+    function renderChips() {
+      actorChipsEl.innerHTML = Array.from(selectedActors).map(n =>
+        '<span class="chip">' + escapeHtml(n) +
+        '<button type="button" title="Remove" data-actor="' + escapeHtml(n) + '">\u00D7</button></span>'
+      ).join('');
+    }
+
+    // Toggle selections via checkbox input events (delegated).
+    actorListEl.addEventListener('change', (e) => {
+      const cb = e.target.closest('input[type="checkbox"]');
+      if (!cb) return;
+      if (cb.checked) selectedActors.add(cb.value);
+      else selectedActors.delete(cb.value);
+      renderActorList();   // refresh checkbox state (list already re-filtered)
+      renderChips();
+      renderFiltered();
+    });
+
+    // Remove a chip.
+    actorChipsEl.addEventListener('click', (e) => {
+      const btn = e.target.closest('button[data-actor]');
+      if (!btn) return;
+      selectedActors.delete(btn.getAttribute('data-actor'));
+      renderActorList();
+      renderChips();
+      renderFiltered();
+    });
 
     // Delegate show-more / show-less clicks (works for re-rendered cards).
     resultsEl.addEventListener('click', (e) => {
@@ -171,6 +369,8 @@
       const query = qInput.value.trim();
       if (!query) { qInput.focus(); return; }
 
+      // Always fetch the FULL result set (no server-side filter); the
+      // checkboxes filter this in-memory afterwards.
       const payload = {
         query,
         source_k:    clampInt('source_k', 10),
@@ -190,7 +390,10 @@
         });
         if (!res.ok) throw new Error('HTTP ' + res.status + ' ' + res.statusText);
         const data = await res.json();
-        render(query, data);
+        lastQuery  = query;
+        allResults = data.results || [];
+        seedActorList(allResults);
+        render(allResults, { all: allResults });
       } catch (err) {
         metaEl.textContent = '';
         resultsEl.innerHTML = '<div class="error">Search failed: ' + escapeHtml(String(err.message || err)) + '</div>';
@@ -231,6 +434,12 @@
       return r.title || r.content || r.description || 'Unnamed result';
     }
 
+    function truncate(s, maxLen) {
+      return String(s == null ? '' : s).length > maxLen
+        ? String(s).slice(0, maxLen - 1) + '\u2026'
+        : String(s == null ? '' : s);
+    }
+
     // Preview is a truncated (CSS-clamped) glance; `.full` shows the whole text.
     function previewText(r) {
       if (r.type === 'Oggetto Informativo') return r.abstract || '';
@@ -254,13 +463,19 @@
       return '<div class="field">' + escapeHtml(nameOf(r)) + '</div>';
     }
 
-    function render(query, data) {
-      const results = data.results || [];
+    function render(results, info) {
+      results = results || [];
+      info = info || {};
+      const total = (info.all || results).length;
       const [ftMin, ftMax] = ftBounds(results);
+
+      var countText = String(results.length) + ' results';
+      if (total !== results.length) countText += ' (filtered from ' + total + ')';
+
       metaEl.textContent =
-        '\u201C' + query + '\u201D \u00B7 ' + results.length + ' results \u00B7 ' +
-        (data.embedding_time_s ?? 0).toFixed(3) + 's embed \u00B7 ' +
-        (data.search_time_s ?? 0).toFixed(3) + 's search';
+        '\u201C' + lastQuery + '\u201D \u00B7 ' + countText + ' \u00B7 ' +
+        (info.embedding_time_s ?? 0).toFixed(3) + 's embed \u00B7 ' +
+        (info.search_time_s ?? 0).toFixed(3) + 's search';
 
       if (!results.length) {
         resultsEl.innerHTML = '<div class="empty">No results found.</div>';
@@ -270,16 +485,31 @@
       resultsEl.innerHTML = results.map((r) => {
         const badgeClass = BADGE_CLASS[r.type] || 'ft';
         const badgeText  = BADGE_SHORT[r.type] || 'FT';
+        const purposeHtml = (r.purposes && r.purposes.length)
+          ? '<div class="purpose-row"><span class="plabel">Purpose:</span> ' +
+            r.purposes.map(p => '<span class="tag">' + escapeHtml(p) + '</span>').join('') + '</div>'
+          : '';
+        const contributorsHtml = (r.actors && r.actors.length)
+          ? '<div class="contributors-row"><span class="plabel">Contributors:</span> ' +
+            escapeHtml(truncate(r.actors.join(', '), 100)) + '</div>'
+          : '';
+        const parentHtml = (r.type !== 'Oggetto Informativo') && r.parent_oi
+          ? '<div class="parent-row"><span class="plabel">OI:</span> ' +
+            escapeHtml(truncate(r.parent_oi.title, 120)) + '</div>'
+          : '';
         return '' +
           '<div class="card">' +
             '<div class="card-head">' +
               '<span class="badge ' + badgeClass + '">' + badgeText + '</span>' +
-              '<span class="name">' + escapeHtml(nameOf(r)) + '</span>' +
+              '<span class="name">' + escapeHtml(truncate(nameOf(r), 180)) + '</span>' +
             '</div>' +
             '<div class="preview">' + escapeHtml(previewText(r)) + '</div>' +
             '<div class="full">' + fullBody(r) + '</div>' +
             '<button type="button" class="toggle">Show more</button>' +
             '<div class="scores"><b>WRRF ' + r.wrrf_score.toFixed(4) + '</b> | ' + scoreText(r, ftMin, ftMax) + '</div>' +
+            purposeHtml +
+            contributorsHtml +
+            parentHtml +
             '<div class="id">db_id: ' + escapeHtml(r.neo4j_id) + '</div>' +
           '</div>';
       }).join('');

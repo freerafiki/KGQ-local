@@ -8,7 +8,7 @@ uvicorn app:app --host 0.0.0.0        # reachable from the LAN; prints your IPs 
 
 ## Run the static frontend
 ```
-./run_frontend.sh                     # page on http://localhost:8080, prints your IPs
+./run_frontend.sh                     # page on http://localhost:28080, prints your IPs
 ```
 
 ## Access from other machines (lab / same Wi-Fi)

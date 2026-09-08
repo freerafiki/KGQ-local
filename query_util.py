@@ -56,11 +56,33 @@ def get_lan_ips():
     return ips or ["127.0.0.1"]
 
 
-# Single hybrid search: BM25 fulltext + 5 vector indexes, fused with wRRF.
+# Hybrid search: BM25 fulltext + 5 vector indexes + authors fulltext, fused with wRRF.
 # The fulltext score is unbounded (BM25-like); cosine scores live in ~[0,1].
 # wRRF uses ONLY the intra-source rank, so the different scales are fine.
 # rawScore is kept for diagnostics / future score-normalization.
-HYBRID_SEARCH_CYPHER = """
+#
+# The query is composed from fragments, one per source. To FILTER by node type
+# we simply leave out the sources belonging to the deselected types and, for
+# the fulltext source (which matches all labels), inject a label WHERE clause.
+# This is a PRE-filter: only candidates of the requested types enter the wRRF
+# fusion, so a small finalK is not starved by "other type" results.
+_ALL_LABELS = ("Contribution", "Recommendation", "Gap")
+
+_SOURCES_BY_LABEL = {
+    "Contribution": [
+        ("description_embeddings", "longQueryVector", "OI_description"),
+        ("title_embeddings", "longQueryVector", "OI_title"),
+        ("subtitle_embeddings", "longQueryVector", "OI_subtitle"),
+    ],
+    "Recommendation": [
+        ("recommendation_embeddings", "queryVector", "recommendation"),
+    ],
+    "Gap": [
+        ("gap_embeddings", "queryVector", "gap"),
+    ],
+}
+
+_CYPHER_HEADER = """
 CYPHER 25
 LET
 query = $query,
@@ -72,107 +94,9 @@ rrfConstant = $rrfConstant,
 sourceWeights = $sourceWeights
 
 CALL (query, queryVector, shortQueryVector, longQueryVector) {
-CALL db.index.fulltext.queryNodes('search_fulltext', query, {limit: $sourceK})
-YIELD node AS result, score
-WITH result, score
-ORDER BY score DESC, result.id ASC
-WITH collect({node: result, rawScore: score}) AS rows
-UNWIND CASE WHEN size(rows) = 0 THEN [] ELSE range(0, size(rows) - 1) END AS rankIndex
-RETURN
-    rows[rankIndex].node AS result,
-    'fulltext' AS source,
-    rankIndex + 1 AS sourceRank,
-    rows[rankIndex].rawScore AS rawScore
+"""
 
-UNION ALL
-
-MATCH (result:Contribution)
-    SEARCH result IN (
-        VECTOR INDEX `description_embeddings`
-        FOR longQueryVector
-        LIMIT $sourceK
-    ) SCORE AS score
-WITH result, score
-ORDER BY score DESC, result.id ASC
-WITH collect({node: result, rawScore: score}) AS rows
-UNWIND CASE WHEN size(rows) = 0 THEN [] ELSE range(0, size(rows) - 1) END AS rankIndex
-RETURN
-    rows[rankIndex].node AS result,
-    'OI_description' AS source,
-    rankIndex + 1 AS sourceRank,
-    rows[rankIndex].rawScore AS rawScore
-
-UNION ALL
-
-MATCH (result:Contribution)
-    SEARCH result IN (
-        VECTOR INDEX `title_embeddings`
-        FOR longQueryVector
-        LIMIT $sourceK
-    ) SCORE AS score
-WITH result, score
-ORDER BY score DESC, result.id ASC
-WITH collect({node: result, rawScore: score}) AS rows
-UNWIND CASE WHEN size(rows) = 0 THEN [] ELSE range(0, size(rows) - 1) END AS rankIndex
-RETURN
-    rows[rankIndex].node AS result,
-    'OI_title' AS source,
-    rankIndex + 1 AS sourceRank,
-    rows[rankIndex].rawScore AS rawScore
-
-UNION ALL
-
-MATCH (result:Contribution)
-    SEARCH result IN (
-        VECTOR INDEX `subtitle_embeddings`
-        FOR longQueryVector
-        LIMIT $sourceK
-    ) SCORE AS score
-WITH result, score
-ORDER BY score DESC, result.id ASC
-WITH collect({node: result, rawScore: score}) AS rows
-UNWIND CASE WHEN size(rows) = 0 THEN [] ELSE range(0, size(rows) - 1) END AS rankIndex
-RETURN
-    rows[rankIndex].node AS result,
-    'OI_subtitle' AS source,
-    rankIndex + 1 AS sourceRank,
-    rows[rankIndex].rawScore AS rawScore
-
-UNION ALL
-
-MATCH (result:Recommendation)
-    SEARCH result IN (
-        VECTOR INDEX `recommendation_embeddings`
-        FOR queryVector
-        LIMIT $sourceK
-    ) SCORE AS score
-WITH result, score
-ORDER BY score DESC, result.id ASC
-WITH collect({node: result, rawScore: score}) AS rows
-UNWIND CASE WHEN size(rows) = 0 THEN [] ELSE range(0, size(rows) - 1) END AS rankIndex
-RETURN
-    rows[rankIndex].node AS result,
-    'recommendation' AS source,
-    rankIndex + 1 AS sourceRank,
-    rows[rankIndex].rawScore AS rawScore
-
-UNION ALL
-
-MATCH (result:Gap)
-    SEARCH result IN (
-        VECTOR INDEX `gap_embeddings`
-        FOR queryVector
-        LIMIT $sourceK
-    ) SCORE AS score
-WITH result, score
-ORDER BY score DESC, result.id ASC
-WITH collect({node: result, rawScore: score}) AS rows
-UNWIND CASE WHEN size(rows) = 0 THEN [] ELSE range(0, size(rows) - 1) END AS rankIndex
-RETURN
-    rows[rankIndex].node AS result,
-    'gap' AS source,
-    rankIndex + 1 AS sourceRank,
-    rows[rankIndex].rawScore AS rawScore
+_CYPHER_FUSION_TAIL = """
 }
 
 LET weight = coalesce(sourceWeights[source], 1.0)
@@ -208,22 +132,136 @@ wrrf: wrrf
 LET limitedRows = orderedRows[..finalK]
 
 UNWIND limitedRows AS row
+WITH row, row.result AS n
+WITH row, n,
+     [(n)-[rm:has_main_function]->(p:Purpose) | p.name] AS mainPurposeNames,
+     [(n)-[rs:has_secondary_function]->(p:Purpose) | p.name] AS secPurposeNames,
+     [ (parent:Contribution)-[rp:recommends|highlights_gap]->(n) | parent ][0] AS oiParent
+WITH row, n, mainPurposeNames, secPurposeNames, oiParent,
+     [ (oiParent)-[rpm:has_main_function]->(p:Purpose) | p.name ] AS parentMainPurposeNames,
+     [ (oiParent)-[rps:has_secondary_function]->(p:Purpose) | p.name ] AS parentSecPurposeNames,
+     [ (ca:ContributionActor)-[rc:contributed_to]->(n) | ca.name ] AS actorNames
 RETURN
-    row.result AS n,
-    row.result.title AS title,
-    row.result.description AS abstract,
-    row.result.findings AS findings,
-    row.result.id AS id,
-    row.result.content AS content,
-    row.result.motivation AS motivation,
-    row.result.description AS description,
+    n AS n,
+    n.title AS title,
+    n.description AS abstract,
+    n.findings AS findings,
+    n.id AS id,
+    n.content AS content,
+    n.motivation AS motivation,
+    n.description AS description,
     row.sources AS sources,
     row.sourceRanks AS sourceRanks,
     row.rawScores AS rawScores,
-    elementId(row.result) AS neo4j_id,
+    elementId(n) AS neo4j_id,
+    mainPurposeNames AS mainPurposeNames,
+    secPurposeNames AS secPurposeNames,
+    oiParent.title AS parentTitle,
+    oiParent.id AS parentId,
+    labels(oiParent) AS parentLabels,
+    elementId(oiParent) AS parentNeo4jId,
+    parentMainPurposeNames AS parentMainPurposeNames,
+    parentSecPurposeNames AS parentSecPurposeNames,
+    actorNames AS actorNames,
     row.wrrf AS wrrf
-ORDER BY row.wrrf DESC, row.result.id ASC;
+ORDER BY row.wrrf DESC, n.id ASC;
 """
+
+
+def _fulltext_fragment(labels):
+    """Fulltext source. `labels` empty tuple => all types, no WHERE clause."""
+    where = ""
+    if labels:
+        conds = " OR ".join(f"'{lab}' IN labels(result)" for lab in labels)
+        where = f"\nWHERE {conds}"
+    return f"""
+CALL db.index.fulltext.queryNodes('search_fulltext', query, {{limit: $sourceK}})
+YIELD node AS result, score
+WITH result, score{where}
+ORDER BY score DESC, result.id ASC
+WITH collect({{node: result, rawScore: score}}) AS rows
+UNWIND CASE WHEN size(rows) = 0 THEN [] ELSE range(0, size(rows) - 1) END AS rankIndex
+RETURN
+    rows[rankIndex].node AS result,
+    'fulltext' AS source,
+    rankIndex + 1 AS sourceRank,
+    rows[rankIndex].rawScore AS rawScore
+"""
+
+
+def _vector_fragment(label, index, vec, source):
+    return f"""
+UNION ALL
+
+MATCH (result:{label})
+    SEARCH result IN (
+        VECTOR INDEX `{index}`
+        FOR {vec}
+        LIMIT $sourceK
+    ) SCORE AS score
+WITH result, score
+ORDER BY score DESC, result.id ASC
+WITH collect({{node: result, rawScore: score}}) AS rows
+UNWIND CASE WHEN size(rows) = 0 THEN [] ELSE range(0, size(rows) - 1) END AS rankIndex
+RETURN
+    rows[rankIndex].node AS result,
+    '{source}' AS source,
+    rankIndex + 1 AS sourceRank,
+    rows[rankIndex].rawScore AS rawScore
+"""
+
+
+def _authors_fragment():
+    return """
+UNION ALL
+
+CALL db.index.fulltext.queryNodes('authors_fulltext', query, {limit: $sourceK})
+YIELD node AS actor, score
+WITH actor, score
+MATCH (actor)-[ra:contributed_to]->(oi:Contribution)
+WITH oi, max(score) AS score
+ORDER BY score DESC, oi.id ASC
+WITH collect({{node: oi, rawScore: score}}) AS rows
+UNWIND CASE WHEN size(rows) = 0 THEN [] ELSE range(0, size(rows) - 1) END AS rankIndex
+RETURN
+    rows[rankIndex].node AS result,
+    'authors' AS source,
+    rankIndex + 1 AS sourceRank,
+    rows[rankIndex].rawScore AS rawScore
+"""
+
+
+_cypher_cache = {}
+
+
+def _build_cypher(labels):
+    """Compose the hybrid query for the requested node labels.
+
+    `labels` is None / empty => no filter, all sources. Otherwise only the
+    sources of the requested labels participate and the fulltext source is
+    restricted to those same labels.
+    """
+    key = tuple(labels) if labels else ()
+    cached = _cypher_cache.get(key)
+    if cached is not None:
+        return cached
+
+    active = set(key)
+    if not active:
+        active = set(_ALL_LABELS)
+
+    parts = [_CYPHER_HEADER, _fulltext_fragment(key)]
+    if "Contribution" in active:
+        parts.append(_authors_fragment())
+    for label in _ALL_LABELS:
+        if label in active:
+            for index, vec, source in _SOURCES_BY_LABEL[label]:
+                parts.append(_vector_fragment(label, index, vec, source))
+    parts.append(_CYPHER_FUSION_TAIL)
+
+    cypher = "".join(parts)
+    _cypher_cache[key] = cypher
+    return cypher
 
 
 def _record_type(labels):
@@ -239,6 +277,32 @@ def _record_type(labels):
     return "Full-text"
 
 
+# A4 "main purpose" taxonomy. A Purpose node's name is a comma-joined phrase
+# (e.g. "Valutazione, i.e. impatti, rischi, ..."), so we match each known
+# keyword and keep the first occurrence per category, in taxonomy order.
+PURPOSE_CATEGORIES = [
+    ("valutazione", "Valutazione"),
+    ("monitoraggio", "Monitoraggio"),
+    ("ricostruzione", "Ricostruzione"),
+    ("previsione", "Previsione"),
+    ("supporto", "Supporto decisioni"),
+    ("governance", "Governance"),
+    ("gap", "Gap di conoscenza"),
+]
+_PURPOSE_LABELS = [label for _, label in PURPOSE_CATEGORIES]
+
+
+def _purpose_labels(names):
+    """Map raw Purpose names (main + secondary) to short category labels."""
+    labels = []
+    for name in names or []:
+        low = name.lower()
+        for keyword, label in PURPOSE_CATEGORIES:
+            if keyword in low and label not in labels:
+                labels.append(label)
+    return labels
+
+
 def _serialize(record):
     """Turn a raw Neo4j record (w/ Node) into a plain JSON-able dict."""
     sources = record['sources']
@@ -252,6 +316,15 @@ def _serialize(record):
         "rawScores": [round(s, 6) for s in record['rawScores']],
         "neo4j_id": record['neo4j_id'],
         "title": record['title'],
+        # Own purposes first, then the parent OI's (Rec/Gap inherit their OI's
+        # purposes, which is what makes purpose filtering meaningful for them).
+        "purposes": _purpose_labels(
+            record['mainPurposeNames']
+            + record['secPurposeNames']
+            + record['parentMainPurposeNames']
+            + record['parentSecPurposeNames']
+        ),
+        "actors": list(dict.fromkeys(record['actorNames'] or [])),
     }
     if entry["type"] == "Oggetto Informativo":
         entry.update({
@@ -265,6 +338,13 @@ def _serialize(record):
         entry.update({"description": record['description']})
     else:
         entry.update({"submission_id": record['id']})
+    if record['parentNeo4jId'] is not None:
+        entry["parent_oi"] = {
+            "labels": list(record['parentLabels'] or []),
+            "title": record['parentTitle'],
+            "id": record['parentId'],
+            "neo4j_id": record['parentNeo4jId'],
+        }
     return entry
 
 
@@ -280,12 +360,18 @@ def embed_query(text: str):
     return embedding_model.encode(text)
 
 
-def run_search(query_text, source_k=10, final_k=20, rrf_constant=60, source_weights=None):
-    """Run the hybrid search (fulltext + vectors, wRRF fusion) and return a dict.
+def run_search(query_text, source_k=10, final_k=20, rrf_constant=60,
+               source_weights=None, types=None):
+    """Run the hybrid search (fulltext + vectors, wRRF fusion).
+
+    Args:
+        types: optional list of Neo4j labels to restrict results to
+            ("Contribution", "Recommendation", "Gap"). Empty/None => all types.
 
     Returns:
         {
           "query": str,
+          "types": [str] | None,
           "embedding_time_s": float,
           "search_time_s": float,
           "results": [ { ... per-result dict, see _serialize ... } ]
@@ -301,7 +387,7 @@ def run_search(query_text, source_k=10, final_k=20, rrf_constant=60, source_weig
     driver = get_driver()
     start_q = time.time()
     records, summary, keys = driver.execute_query(
-        HYBRID_SEARCH_CYPHER,
+        _build_cypher(types),
         query=query_text,
         queryVector=query_embedding,
         shortQueryVector=query_embedding,
@@ -317,6 +403,7 @@ def run_search(query_text, source_k=10, final_k=20, rrf_constant=60, source_weig
 
     return {
         "query": query_text,
+        "types": tuple(types) if types else None,
         "embedding_time_s": round(embedding_time, 4),
         "search_time_s": round(search_time, 4),
         "results": [_serialize(record) for record in records],

@@ -1,7 +1,8 @@
 """
 KGQ Search API
 
-Run with:  uvicorn app:app --reload   (or:  python app.py)
+Run with:  uvicorn app:app --host 0.0.0.0 --port 28000
+   (or:    python app.py)
 
 Exposes the hybrid retrieval pipeline implemented in query_util.run_search().
 
@@ -21,8 +22,15 @@ import time
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
+from typing import Literal
 
 import query_util
+
+
+class FilterModel(BaseModel):
+    types: list[Literal["Contribution", "Recommendation", "Gap"]] = Field(
+        default=[], description="Node labels to restrict results to; empty = all types"
+    )
 
 
 class SearchRequest(BaseModel):
@@ -30,13 +38,16 @@ class SearchRequest(BaseModel):
     source_k: int = Field(default=10, ge=1, description="Candidates pulled per source")
     final_k: int = Field(default=20, ge=1, description="Final merged results to return")
     rrf_constant: int = Field(default=60, ge=1, description="wRRF denominator offset")
+    filters: FilterModel | None = Field(
+        default=None, description="Result filters (e.g. restrict to specific node types)"
+    )
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     # query_util.get_driver() is lazy; nothing to do here besides a health check.
     for ip in query_util.get_lan_ips():
-        print(f"API on http://{ip}:8000  (LAN access)")
+        print(f"API on http://{ip}:28000  (LAN access)")
     yield
     query_util.close_driver()
 
@@ -63,15 +74,18 @@ def health():
 def search(req: SearchRequest):
     """Hybrid search: BM25 fulltext + vector indexes, fused via wRRF."""
     query_preview = req.query if len(req.query) <= 100 else req.query[:100] + "\u2026"
+    types = req.filters.types if req.filters else None
     started = time.perf_counter()
     print(f"[{datetime.now().isoformat(timespec='seconds')}] search IN    q={query_preview!r} "
-          f"(source_k={req.source_k}, final_k={req.final_k}, rrf={req.rrf_constant})")
+          f"(source_k={req.source_k}, final_k={req.final_k}, rrf={req.rrf_constant}"
+          f"{', types=' + ','.join(types) if types else ''})")
 
     result = query_util.run_search(
         req.query,
         source_k=req.source_k,
         final_k=req.final_k,
         rrf_constant=req.rrf_constant,
+        types=types,
     )
     total = time.perf_counter() - started
     print(f"[{datetime.now().isoformat(timespec='seconds')}] search DONE  "
@@ -84,4 +98,4 @@ def search(req: SearchRequest):
 if __name__ == "__main__":
     import uvicorn
 
-    uvicorn.run("app:app", host="127.0.0.1", port=8000)
+    uvicorn.run("app:app", host="127.0.0.1", port=28000)

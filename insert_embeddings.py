@@ -25,7 +25,7 @@ NEO4J_GRAPH=os.getenv('NEO4J_GRAPH')
 driver = GraphDatabase.driver(NEO4J_URI, auth=(NEO4J_USER, NEO4J_PASSWORD))
 # parameters 
 DROP_INDICES = True
-RESET_EMBEDDING_STATUS = True
+RESET_EMBEDDING_STATUS = False
 
 
 
@@ -52,6 +52,9 @@ if DROP_INDICES:
     """, database_=NEO4J_GRAPH, routing_=RoutingControl.WRITE)
     records, summary, keys = driver.execute_query("""
     DROP INDEX search_fulltext IF EXISTS;
+    """, database_=NEO4J_GRAPH, routing_=RoutingControl.WRITE)
+    records, summary, keys = driver.execute_query("""
+    DROP INDEX authors_fulltext IF EXISTS;
     """, database_=NEO4J_GRAPH, routing_=RoutingControl.WRITE)
 
     print("DONE")
@@ -376,7 +379,16 @@ records, summary, keys = driver.execute_query("""
     ON EACH [n.officialTitle, n.subtitle, n.description, n.findings, n.content, n.motivation]
 """, database_=NEO4J_GRAPH, routing_=RoutingControl.WRITE)
 
-# campo degli autori e degli enti, stakeholder
+print("Creating index for authors")
+records, summary, keys = driver.execute_query("""
+    CREATE FULLTEXT INDEX authors_fulltext IF NOT EXISTS
+    FOR (a:ContributionActor)
+    ON EACH [a.name]
+    OPTIONS { indexConfig: {
+        `fulltext.analyzer`: 'standard-no-stop-words',
+        `fulltext.eventually_consistent`: false
+    } }
+""", database_=NEO4J_GRAPH, routing_=RoutingControl.WRITE)
 
 print(f'Created index for {len(records)} ({summary.counters.properties_set} properties set)')
 
