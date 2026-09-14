@@ -1,0 +1,274 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Node details · KGQ Search</title>
+  <style>
+    :root {
+      --accent: #1a73e8;
+      --border: #dadce0;
+      --muted: #5f6368;
+      --card-border: #e1e4e8;
+      --oi: #1a73e8;
+      --rec: #188038;
+      --gap: #e37400;
+      --bg: #fff;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0; font-family: Arial, Helvetica, sans-serif;
+      background: var(--bg); color: #202124;
+      padding: 20px 16px 40px;
+    }
+    .container { max-width: 880px; margin: 0 auto; }
+    .logo { font-size: 20px; letter-spacing: -1px; margin: 0 0 16px; font-weight: 400; }
+    .logo b { color: var(--accent); }
+    .logo a { color: inherit; text-decoration: none; }
+    .topbar { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 14px; }
+    .back {
+      border: 1px solid var(--border); background: #fff; color: #202124;
+      border-radius: 8px; padding: 8px 14px; font-size: 14px; cursor: pointer;
+      text-decoration: none; display: inline-flex; align-items: center; gap: 6px;
+    }
+    .back:hover { background: #f1f3f4; }
+    .header { display: flex; align-items: center; gap: 12px; margin-bottom: 18px; flex-wrap: wrap; }
+    .badge {
+      flex-shrink: 0; display: inline-block; min-width: 56px; text-align: center;
+      font-size: 11px; font-weight: 700; letter-spacing: .4px; text-transform: uppercase;
+      color: #fff; border-radius: 12px; padding: 4px 10px;
+    }
+    .badge.oi { background: var(--oi); }
+    .badge.rec { background: var(--rec); }
+    .badge.gap { background: var(--gap); }
+    .badge.ft { background: var(--muted); }
+    .name { font-size: 20px; font-weight: 600; color: var(--accent); line-height: 1.35; }
+    .section {
+      border: 1px solid var(--card-border); border-radius: 10px;
+      padding: 14px 16px; margin-bottom: 16px;
+    }
+    .section h2 {
+      margin: 0 0 10px; font-size: 13px; font-weight: 700;
+      color: var(--muted); text-transform: uppercase; letter-spacing: .5px;
+    }
+    table.props { width: 100%; border-collapse: collapse; font-size: 14px; }
+    table.props td { padding: 6px 8px; vertical-align: top; border-top: 1px solid var(--card-border); }
+    table.props td.k {
+      width: 38%; color: var(--muted); font-size: 13px; font-weight: 600;
+    }
+    table.props td.v { overflow-wrap: anywhere; }
+    .tags { display: flex; flex-wrap: wrap; gap: 6px; }
+    .tag {
+      display: inline-block; background: #e8f0fe; color: #174ea6;
+      font-size: 12px; padding: 3px 10px; border-radius: 12px;
+    }
+    .empty { color: var(--muted); font-size: 13px; }
+    .actor-list, .link-list { list-style: none; margin: 0; padding: 0; }
+    .actor-list li { font-size: 14px; padding: 4px 0; }
+    .link-item {
+      display: block; border: 1px solid var(--card-border); border-radius: 8px;
+      padding: 10px 12px; margin-bottom: 8px; text-decoration: none; color: #202124;
+    }
+    .link-item:hover { background: #f8f9fa; border-color: var(--accent); }
+    .link-item .l-badge { font-size: 11px; font-weight: 700; margin-right: 8px; }
+    .l-badge.oi { color: var(--oi); } .l-badge.rec { color: var(--rec); } .l-badge.gap { color: var(--gap); }
+    .link-item .l-title { font-weight: 600; color: var(--accent); }
+    .link-item .l-snippet { color: var(--muted); font-size: 13px; margin-top: 4px; overflow-wrap: anywhere; }
+    .link-item .l-rel { font-size: 12px; color: var(--muted); margin-top: 4px; }
+    .error { color: #d93025; text-align: center; padding: 40px 0; }
+    .loading { color: var(--muted); text-align: center; padding: 40px 0; }
+    .sub { font-size: 13px; color: var(--muted); }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="topbar">
+      <button class="back" id="back-btn">&larr; Back</button>
+      <div class="logo"><a href="index.html"><b>VCDB</b> Search</a></div>
+    </div>
+    <div id="content"><div class="loading">Loading&hellip;</div></div>
+  </div>
+
+  <script>
+    const API_BASE = location.protocol + '//' + location.hostname + ':28000';
+    const BADGE_CLASS = { 'Oggetto Informativo': 'oi', 'Raccomandazione': 'rec', 'Lacuna': 'gap', 'Full-text': 'ft' };
+    const BADGE_SHORT = { 'Oggetto Informativo': 'OI', 'Raccomandazione': 'Rec', 'Lacuna': 'Gap', 'Full-text': 'FT' };
+
+    const PROP_LABELS = {
+      officialTitle: 'Official Title',
+      title: 'Title',
+      subtitle: 'Subtitle',
+      description: 'Description',
+      findings: 'Findings',
+      content: 'Content',
+      motivation: 'Motivation',
+      decision_type: 'Decision type',
+      conditions: 'Conditions',
+      knowledge: 'Knowledge',
+      policy: 'Policy',
+      id: 'ID',
+      releaseYear: 'Release year',
+      releaseDate: 'Release date',
+      grant: 'Grant',
+      version: 'Version',
+      versionDetails: 'Version details',
+      submitted: 'Submitted',
+      dateType: 'Date type',
+      temporalType: 'Temporal type',
+      temporalReference: 'Temporal reference',
+      temporalResolution_0: 'Temporal resolution',
+      spatial_type: 'Spatial type',
+      spatial_scale: 'Spatial scale',
+      spatial_resolution: 'Spatial resolution',
+      coveredAreaDescription: 'Covered area',
+      discrete_spatial_type: 'Discrete spatial type',
+      discrete_points_insertion_mode: 'Discrete points insertion',
+      validityPeriod: 'Validity period',
+      forDecision: 'For decision',
+      forRecommendation: 'For recommendation',
+      expert_evaluation: 'Expert evaluation',
+      internal_note: 'Internal note',
+      internal_record_state: 'Internal record state',
+      note: 'Note',
+      future_work: 'Future work',
+      intervals_year_month_1: 'Time intervals',
+    };
+
+    const eid = new URLSearchParams(location.search).get('eid');
+
+    document.getElementById('back-btn').addEventListener('click', goBack);
+    document.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape') goBack();
+    });
+
+    function goBack() {
+      if (history.length > 1) history.back();
+      else location.href = 'index.html';
+    }
+
+    function esc(s) {
+      return String(s == null ? '' : s).replace(/[&<>"']/g, c => ({
+        '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;',
+      }[c]));
+    }
+
+    function formatValue(v) {
+      if (Array.isArray(v)) return esc(v.join(', '));
+      if (v && typeof v === 'object') return esc(JSON.stringify(v));
+      return esc(String(v == null ? '' : v));
+    }
+
+    function link(brief) {
+      const label = brief.purposes && brief.purposes.length ? brief.purposes.join(', ') : '';
+      const snippet = brief.title || brief.content || brief.description || 'No text';
+      return '<a class="link-item" href="node.html?eid=' + encodeURIComponent(brief.eid) + '">' +
+        '<span class="l-badge ' + (BADGE_CLASS[brief.type] || 'ft') + '">' + esc(BADGE_SHORT[brief.type] || 'FT') + '</span>' +
+        '<span class="l-title">' + esc(brief.title || brief.content || brief.description || 'Node') + '</span>' +
+        '<div class="l-snippet">' + esc(truncate(snippet, 180)) + '</div>' +
+        (brief.rel ? '<div class="l-rel">Linked via ' + esc(brief.rel) + '</div>' : '') +
+        (label ? '<div class="l-rel">Purpose: ' + esc(label) + '</div>' : '') +
+        '</a>';
+    }
+
+    function truncate(s, n) {
+      s = String(s == null ? '' : s);
+      return s.length > n ? s.slice(0, n - 1) + '\u2026' : s;
+    }
+
+    async function load() {
+      const content = document.getElementById('content');
+      if (!eid) {
+        content.innerHTML = '<div class="error">Missing node id (eid query param).</div>';
+        return;
+      }
+      try {
+        const res = await fetch(API_BASE + '/node/' + encodeURIComponent(eid));
+        if (res.status === 404) throw new Error('Node not found');
+        if (!res.ok) throw new Error('HTTP ' + res.status);
+        const d = await res.json();
+        render(d);
+      } catch (err) {
+        content.innerHTML = '<div class="error">Failed to load node: ' + esc(String(err.message || err)) + '</div>';
+      }
+    }
+
+    function render(d) {
+      document.title = 'Node details · KGQ Search';
+      const badgeClass = BADGE_CLASS[d.type] || 'ft';
+      const propsRows = Object.entries(d.properties)
+        .filter(([k]) => !k.endsWith('EmbeddingStatus'))
+        .map(([k, v]) =>
+          '<tr><td class="k">' + esc(PROP_LABELS[k] || k) + '</td><td class="v">' + formatValue(v) + '</td></tr>'
+        ).join('');
+      const vectorRows = Object.entries(d.vectorProps).map(([k, dim]) =>
+        '<tr><td class="k">' + esc(PROP_LABELS[k] || k) + '</td><td class="v">' + dim + '-dim vector</td></tr>'
+      ).join('');
+
+      let html = '';
+      html += '<div class="header">' +
+        '<span class="badge ' + badgeClass + '">' + esc(BADGE_SHORT[d.type] || 'FT') + '</span>' +
+        '<span class="name">' + esc(nameOf(d)) + '</span>' +
+        '</div>';
+
+      // Properties
+      html += '<div class="section"><h2>Properties</h2>' +
+        (propsRows || vectorRows
+          ? '<table class="props">' + propsRows + vectorRows + '</table>'
+          : '<div class="empty">No stored properties.</div>') +
+        '</div>';
+
+      // Statuses (embeddings bookkeeping, small)
+      const statusRows = Object.entries(d.properties).filter(([k]) => k.endsWith('EmbeddingStatus'));
+      if (statusRows.length) {
+        html += '<div class="section"><h2>Embedding status</h2><table class="props">' +
+          statusRows.map(([k, v]) => '<tr><td class="k">' + esc(k) + '</td><td class="v">' + esc(v) + '</td></tr>').join('') +
+          '</table></div>';
+      }
+
+      // Purpose tags
+      if (d.purposes && d.purposes.length) {
+        html += '<div class="section"><h2>Main purpose</h2><div class="tags">' +
+          d.purposes.map(p => '<span class="tag">' + esc(p) + '</span>').join('') +
+          '</div></div>';
+      }
+
+      // Contributors
+      if (d.actors && d.actors.length) {
+        html += '<div class="section"><h2>Contributors</h2><ul class="actor-list">' +
+          d.actors.map(a => '<li>' + esc(a.name) + (a.type ? ' <span class="sub">(' + esc(a.type) + ')</span>' : '') + '</li>').join('') +
+          '</ul></div>';
+      }
+
+      // Parent OI (for Rec/Gap)
+      if (d.parents && d.parents.length) {
+        html += '<div class="section"><h2>Parent OI</h2>' + d.parents.map(link).join('') + '</div>';
+      }
+
+      // Connected Recs/Gaps (for OI)
+      if (d.children && d.children.length) {
+        const recs = d.children.filter(c => c.type === 'Raccomandazione');
+        const gaps = d.children.filter(c => c.type === 'Lacuna');
+        if (recs.length) {
+          html += '<div class="section"><h2>Connected Recommendations (' + recs.length + ')</h2>' + recs.map(link).join('') + '</div>';
+        }
+        if (gaps.length) {
+          html += '<div class="section"><h2>Connected Gaps (' + gaps.length + ')</h2>' + gaps.map(link).join('') + '</div>';
+        }
+        if (!recs.length && !gaps.length) {
+          html += '<div class="section"><h2>Connected Recs / Gaps</h2><div class="empty">No Rec/Gap linked to this OI.</div></div>';
+        }
+      }
+
+      html += '<div class="sub">db_id: ' + esc(d.eid) + '</div>';
+      document.getElementById('content').innerHTML = html;
+    }
+
+    function nameOf(d) {
+      const p = d.properties || {};
+      return p.officialTitle || p.title || p.content || p.description || 'Unnamed node';
+    }
+
+    load();
+  </script>
+</body>
+</html>

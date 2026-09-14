@@ -4,6 +4,13 @@ from dotenv import load_dotenv
 from neo4j import GraphDatabase, RoutingControl
 from huggingface_hub import login
 from query_config import embedding_dims, embedding_model
+from embedding_text import (
+    contribution_description_text,
+    contribution_title_text,
+    contribution_subtitle_text,
+    recommendation_text,
+    gap_text,
+)
 
 """
 This code inserts the embedding into the desired node. 
@@ -136,11 +143,7 @@ demb_records, summary, keys = driver.execute_query("""
 """, database_=NEO4J_GRAPH, routing_=RoutingControl.READ)
 contributions_descr_embeddings = []
 for j, row in enumerate(demb_records):
-    description_text = ""
-    if row['desc']:
-    	description_text += "Description: " + row["desc"] + ". "																									
-    if row['findings']:
-    	description_text += "Findings: " + row['findings']
+    description_text = contribution_description_text(row['desc'], row['findings'])
     if row['desc'] or row['findings']:
         contributions_descr_embeddings.append({
     	'id':row['id'],
@@ -169,7 +172,7 @@ for j, row in enumerate(temb_records):
         contributions_title_embeddings.append({
     	'id':row['id'],
         'neo4j_id': row['n4j_id'],
-    	'title_embedding':embedding_model.encode(row['title']),
+    	'title_embedding':embedding_model.encode(contribution_title_text(row['title'])),
     })
 print(f"Prepared {len(contributions_title_embeddings)} title embeddings from {len(temb_records)} contributions")   # should be ~2 * len(title_rows) (embedding + status)
 records, summary, keys = driver.execute_query("""
@@ -193,7 +196,7 @@ for j, row in enumerate(semb_records):
         contributions_subtitle_embeddings.append({
     	'id':row['id'],
         'neo4j_id': row['n4j_id'],
-    	'subtitle_embedding':embedding_model.encode(row['subtitle']),
+    	'subtitle_embedding':embedding_model.encode(contribution_subtitle_text(row['subtitle'])),
     })
 print(f"Prepared {len(contributions_subtitle_embeddings)} subtitle embeddings from {len(semb_records)} contributions")   # should be ~2 * len(title_rows) (embedding + status)
 records, summary, keys = driver.execute_query("""
@@ -271,11 +274,7 @@ recommendations_embeddings = []
 for row in records:
     r_id = row['id']
     neo4j_id = row['n4j_id']
-    text_to_embed = ""
-    if row['content']:
-        text_to_embed += "Contenuto: " + row["content"] + ". "																									
-    if row['motivation']:
-        text_to_embed += "Findings: " + row['motivation']
+    text_to_embed = recommendation_text(row['content'], row['motivation'])
     if (not row['content']) and (not row['motivation']):
         print(f"\tWARNING: We discard the recommendation:\n\t\t{row}\n\tBecause it does not have content")
     if (row['content'] or row['motivation']):
@@ -335,7 +334,7 @@ gap_embeddings = []
 for row in records:
     r_id = row['id']
     neo4j_id = row['n4j_id']
-    text_to_embed = row["description"]
+    text_to_embed = gap_text(row["description"])
     if text_to_embed:
         gap_embeddings.append({
 			'id':r_id,

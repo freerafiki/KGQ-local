@@ -19,7 +19,7 @@ from contextlib import asynccontextmanager
 from datetime import datetime
 import time
 
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 from typing import Literal
@@ -93,6 +93,16 @@ def search(req: SearchRequest):
           f"neo4j={result['search_time_s']:.3f}s total={total:.3f}s "
           f"results={len(result['results'])}")
     return result
+
+
+@app.get("/node/{eid}")
+def node_detail(eid: str):
+    """Full properties of one node + its OI <-> Rec/Gap neighbourhood."""
+    detail = query_util.get_node_detail(eid)
+    if detail is None:
+        raise HTTPException(status_code=404, detail=f"Node not found: {eid}")
+    print(f"[{datetime.now().isoformat(timespec='seconds')}] node IN   eid={eid}")
+    return detail
 
 
 if __name__ == "__main__":

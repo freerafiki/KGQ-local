@@ -221,7 +221,7 @@ WITH actor, score
 MATCH (actor)-[ra:contributed_to]->(oi:Contribution)
 WITH oi, max(score) AS score
 ORDER BY score DESC, oi.id ASC
-WITH collect({{node: oi, rawScore: score}}) AS rows
+WITH collect({node: oi, rawScore: score}) AS rows
 UNWIND CASE WHEN size(rows) = 0 THEN [] ELSE range(0, size(rows) - 1) END AS rankIndex
 RETURN
     rows[rankIndex].node AS result,
@@ -435,3 +435,107 @@ def fulltext_score_bounds(results):
         if src == "fulltext"
     ]
     return (min(ft), max(ft)) if ft else (0.0, 1.0)
+
+
+# Minimal JSON-able summary of a linked node (child/parent OI).
+def _make_brief(eid, props, labels, rel=None):
+    props = props or {}
+    return {
+        "eid": eid,
+        "labels": sorted(labels or []),
+        "type": _record_type(labels or []),
+        "rel": rel,
+        "title": props.get("officialTitle") or props.get("title"),
+        "content": props.get("content"),
+        "description": props.get("description"),
+        "motivation": props.get("motivation"),
+    }
+
+
+def _fetch_purposes(eids):
+    """Batch-read Purpose names for a set of element IDs. eids => dict{eid: [labels]}."""
+    eids = [e for e in eids if e]
+    if not eids:
+        return {}
+    driver = get_driver()
+    rows, _, _ = driver.execute_query(
+        "MATCH (x)-[:has_main_function|has_secondary_function]->(p:Purpose) "
+        "WHERE elementId(x) IN $eids "
+        "RETURN elementId(x) AS eid, collect(DISTINCT p.name) AS names",
+        eids=eids, database_=NEO4J_GRAPH, routing_=RoutingControl.READ)
+    return {r["eid"]: _purpose_labels(r["names"]) for r in rows}
+
+
+def get_node_detail(element_id):
+    """Full details of a single node + its OI <-> Rec/Gap neighbourhood.
+
+    Returns None if the node does not exist. Used by GET /node/{eid}.
+    Vector properties are summarised as their dimension (the raw 1024-float
+    arrays would bloat the payload); everything else is passed through.
+    """
+    driver = get_driver()
+
+    rows, _, _ = driver.execute_query(
+        "MATCH (n) WHERE elementId(n) = $eid "
+        "RETURN properties(n) AS props, labels(n) AS labels",
+        eid=element_id, database_=NEO4J_GRAPH, routing_=RoutingControl.READ)
+    if not rows:
+        return None
+    props = dict(rows[0]["props"] or {})
+    labels = sorted(rows[0]["labels"] or [])
+
+    entry = {
+        "eid": element_id,
+        "labels": labels,
+        "type": _record_type(labels),
+        "properties": {},
+        "vectorProps": {},
+        "purposes": _fetch_purposes([element_id]).get(element_id, []),
+        "actors": [],
+        "parents": [],
+        "children": [],
+    }
+
+    for k, v in props.items():
+        if isinstance(v, (list, tuple)) and len(v) > 30 and all(
+                isinstance(x, (int, float)) for x in v):
+            entry["vectorProps"][k] = len(v)
+        else:
+            entry["properties"][k] = v
+
+    if "Contribution" in labels:
+        arows, _, _ = driver.execute_query(
+            "MATCH (ca:ContributionActor)-[:contributed_to]->(n) "
+            "WHERE elementId(n) = $eid RETURN ca.name AS name, ca.type AS atype",
+            eid=element_id, database_=NEO4J_GRAPH, routing_=RoutingControl.READ)
+        entry["actors"] = [{"name": r["name"], "type": r["atype"]} for r in arows]
+
+        crows, _, _ = driver.execute_query(
+            "MATCH (n)-[r:recommends|highlights_gap]->(child) "
+            "WHERE elementId(n) = $eid "
+            "RETURN type(r) AS rel, elementId(child) AS ceid, "
+            "labels(child) AS clabels, properties(child) AS cprops",
+            eid=element_id, database_=NEO4J_GRAPH, routing_=RoutingControl.READ)
+        eids = [r["ceid"] for r in crows]
+        purposes = _fetch_purposes(eids)
+        entry["children"] = [
+            {**_make_brief(r["ceid"], r["cprops"], r["clabels"], r["rel"]),
+             "purposes": purposes.get(r["ceid"], [])}
+            for r in crows
+        ]
+    else:
+        prows, _, _ = driver.execute_query(
+            "MATCH (parent:Contribution)-[r:recommends|highlights_gap]->(n) "
+            "WHERE elementId(n) = $eid "
+            "RETURN type(r) AS rel, elementId(parent) AS peid, "
+            "labels(parent) AS plabels, properties(parent) AS pprops",
+            eid=element_id, database_=NEO4J_GRAPH, routing_=RoutingControl.READ)
+        eids = [r["peid"] for r in prows]
+        purposes = _fetch_purposes(eids)
+        entry["parents"] = [
+            {**_make_brief(r["peid"], r["pprops"], r["plabels"], r["rel"]),
+             "purposes": purposes.get(r["peid"], [])}
+            for r in prows
+        ]
+
+    return entry

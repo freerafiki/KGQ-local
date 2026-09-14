@@ -97,7 +97,10 @@
     .results { margin-top: 4px; }
     .card {
       border: 1px solid var(--card-border); border-radius: 10px; padding: 16px; margin-bottom: 14px;
+      cursor: pointer; transition: border-color .15s, box-shadow .15s;
     }
+    .card:hover { border-color: var(--accent); box-shadow: 0 1px 5px rgba(32,33,36,.12); }
+    .card:active { border-color: var(--accent-dark); }
     .card-head { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; }
     .name { font-size: 17px; font-weight: 600; color: var(--accent); }
     .badge {
@@ -356,13 +359,21 @@
       renderFiltered();
     });
 
-    // Delegate show-more / show-less clicks (works for re-rendered cards).
+    // Delegate card clicks (works for re-rendered cards): "Show more/less"
+    // toggling stops propagation, any other click opens the detail page.
     resultsEl.addEventListener('click', (e) => {
       const toggle = e.target.closest('.toggle');
-      if (!toggle) return;
-      const card = toggle.closest('.card');
-      const open = card.classList.toggle('open');
-      toggle.textContent = open ? 'Show less' : 'Show more';
+      if (toggle) {
+        e.stopPropagation();
+        const card = toggle.closest('.card');
+        const open = card.classList.toggle('open');
+        toggle.textContent = open ? 'Show less' : 'Show more';
+        return;
+      }
+      const card = e.target.closest('.card');
+      if (card && card.dataset.eid) {
+        location.href = 'node.html?eid=' + encodeURIComponent(card.dataset.eid);
+      }
     });
 
     async function search() {
@@ -498,7 +509,7 @@
             escapeHtml(truncate(r.parent_oi.title, 120)) + '</div>'
           : '';
         return '' +
-          '<div class="card">' +
+          '<div class="card" data-eid="' + escapeHtml(r.neo4j_id) + '">' +
             '<div class="card-head">' +
               '<span class="badge ' + badgeClass + '">' + badgeText + '</span>' +
               '<span class="name">' + escapeHtml(truncate(nameOf(r), 180)) + '</span>' +
