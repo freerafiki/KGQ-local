@@ -3,6 +3,7 @@ import os
 from dotenv import load_dotenv
 from neo4j import GraphDatabase, RoutingControl
 from huggingface_hub import login
+from tqdm import tqdm
 from query_config import embedding_dims, embedding_model
 from embedding_text import (
     contribution_description_text,
@@ -10,6 +11,7 @@ from embedding_text import (
     contribution_subtitle_text,
     recommendation_text,
     gap_text,
+    project_text,
 )
 
 """
@@ -56,6 +58,9 @@ if DROP_INDICES:
     """, database_=NEO4J_GRAPH, routing_=RoutingControl.WRITE)
     records, summary, keys = driver.execute_query("""
     DROP INDEX gap_embeddings IF EXISTS;
+    """, database_=NEO4J_GRAPH, routing_=RoutingControl.WRITE)
+    records, summary, keys = driver.execute_query("""
+    DROP INDEX project_embeddings IF EXISTS;
     """, database_=NEO4J_GRAPH, routing_=RoutingControl.WRITE)
     records, summary, keys = driver.execute_query("""
     DROP INDEX search_fulltext IF EXISTS;
@@ -142,7 +147,7 @@ demb_records, summary, keys = driver.execute_query("""
     RETURN n.id AS id, elementId(n) AS n4j_id, n.description AS desc, n.findings AS findings
 """, database_=NEO4J_GRAPH, routing_=RoutingControl.READ)
 contributions_descr_embeddings = []
-for j, row in enumerate(demb_records):
+for j, row in enumerate(tqdm(demb_records, desc="Embedding descriptions", unit="node")):
     description_text = contribution_description_text(row['desc'], row['findings'])
     if row['desc'] or row['findings']:
         contributions_descr_embeddings.append({
@@ -167,7 +172,7 @@ temb_records, summary, keys = driver.execute_query("""
     RETURN n.id AS id, elementId(n) AS n4j_id, n.officialTitle AS title
 """, database_=NEO4J_GRAPH, routing_=RoutingControl.READ)
 contributions_title_embeddings = []
-for j, row in enumerate(temb_records):
+for j, row in enumerate(tqdm(temb_records, desc="Embedding titles", unit="node")):
     if row['title']:
         contributions_title_embeddings.append({
     	'id':row['id'],
@@ -191,7 +196,7 @@ semb_records, summary, keys = driver.execute_query("""
     RETURN n.id AS id, elementId(n) AS n4j_id, n.subtitle AS subtitle
 """, database_=NEO4J_GRAPH, routing_=RoutingControl.READ)
 contributions_subtitle_embeddings = []
-for j, row in enumerate(semb_records):
+for j, row in enumerate(tqdm(semb_records, desc="Embedding subtitles", unit="node")):
     if row['subtitle']:
         contributions_subtitle_embeddings.append({
     	'id':row['id'],
@@ -271,7 +276,7 @@ print(f"Found {len(records)} Recommendations with `todo`")   # should be ~2 * le
 
 print(f"Embedding recommendations (we have {len(records)})")
 recommendations_embeddings = []
-for row in records:
+for row in tqdm(records, desc="Embedding recommendations", unit="node"):
     r_id = row['id']
     neo4j_id = row['n4j_id']
     text_to_embed = recommendation_text(row['content'], row['motivation'])
@@ -331,7 +336,7 @@ print(f"Found {len(records)} Gaps with `todo`")   # should be ~2 * len(title_row
 
 print(f"Embedding {len(records)} gaps")
 gap_embeddings = []
-for row in records:
+for row in tqdm(records, desc="Embedding gaps", unit="node"):
     r_id = row['id']
     neo4j_id = row['n4j_id']
     text_to_embed = gap_text(row["description"])
@@ -361,6 +366,67 @@ driver.execute_query("""
 """, vec_dim=embedding_dims, sim='cosine', database_=NEO4J_GRAPH, routing_=RoutingControl.WRITE)
 
 
+#
+#   ____                _                   _
+#  |  _ \ ___  ___ ___ | |_ _ __ ___   __ _| |_ ___ _ __
+#  | | | / _ \/ __/ _ \| __| '_ ` _ \ / _` | __/ _ \ '__|
+#  | |_| |  __/ (_| (_) | |_| | | | | (_| | ||  __/ |
+#  |____/ \___|\___\___/ \__|_| |_| |_|\__,_|\__\___|_|
+#
+print("=" * 70)
+print("Overview of Projects")
+records, summary, keys = driver.execute_query("""
+    MATCH (n:Project)
+    RETURN n
+""", database_=NEO4J_GRAPH, routing_=RoutingControl.READ)
+print(f"We have {len(records)} Projects")
+
+records, summary, keys = driver.execute_query("""
+    MATCH (n:Project)
+    WHERE n.embeddingStatus IS NULL
+    SET n.embeddingStatus = 'todo'
+""", database_=NEO4J_GRAPH, routing_=RoutingControl.WRITE)
+print(f"set status on {summary.counters.properties_set} nodes")   # should be ~2 * len(projects embedded) (embedding + status)
+
+records, summary, keys = driver.execute_query("""
+    MATCH (n:Project)
+    WHERE n.embeddingStatus = 'todo'
+    RETURN n.id_num AS id, elementId(n) AS n4j_id, n.description AS description
+""", database_=NEO4J_GRAPH, routing_=RoutingControl.READ)
+print(f"Found {len(records)} Projects with `todo`")
+
+print(f"Embedding project descriptions (we have {len(records)})")
+project_embeddings = []
+for row in tqdm(records, desc="Embedding project descriptions", unit="node"):
+    p_id = row['id']
+    neo4j_id = row['n4j_id']
+    text_to_embed = project_text(row['description'])
+    if not text_to_embed:
+        print(f"\tWARNING: We discard the project:\n\t\t{row}\n\t\tBecause it has no description")
+    if text_to_embed:
+        project_embeddings.append({
+            'id': p_id,
+            'neo4j_id': neo4j_id,
+            'embedding': embedding_model.encode(text_to_embed)
+        })
+
+print(f"Setting project node properties ({len(project_embeddings)} projects embedded)")
+records, summary, keys = driver.execute_query("""
+    UNWIND $rows AS row
+	MATCH (n:Project) WHERE elementId(n) = row.neo4j_id
+    CALL db.create.setNodeVectorProperty(n, 'embedding', row.embedding)
+    SET n.embeddingStatus = 'done'
+""", rows=project_embeddings, database_=NEO4J_GRAPH, routing_=RoutingControl.WRITE)
+print(f"set status `done` on {summary.counters.properties_set} nodes")   # should be ~2 * len(project_embeddings) (embedding + status)
+
+print("Creating index for projects")
+driver.execute_query("""
+    CREATE VECTOR INDEX project_embeddings IF NOT EXISTS
+    FOR (n:Project) ON (n.embedding)
+    OPTIONS { indexConfig: { `vector.dimensions`: $vec_dim, `vector.similarity_function`: $sim } }
+""", vec_dim=embedding_dims, sim='cosine', database_=NEO4J_GRAPH, routing_=RoutingControl.WRITE)
+
+
 
 
 #    __       _ _       _            _   
@@ -374,8 +440,8 @@ print("=" * 70)
 print("Creating index for full text")                                
 records, summary, keys = driver.execute_query("""
     CREATE FULLTEXT INDEX search_fulltext IF NOT EXISTS
-    FOR (n:Contribution|Recommendation|Gap)
-    ON EACH [n.officialTitle, n.subtitle, n.description, n.findings, n.content, n.motivation]
+    FOR (n:Contribution|Recommendation|Gap|Project)
+    ON EACH [n.officialTitle, n.subtitle, n.description, n.findings, n.content, n.motivation, n.name]
 """, database_=NEO4J_GRAPH, routing_=RoutingControl.WRITE)
 
 print("Creating index for authors")

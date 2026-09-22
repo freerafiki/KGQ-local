@@ -54,6 +54,8 @@ def main(args):
             print(f"\tDescrizione: {record['description']}\n\n\tdb_id={record['neo4j_id']}\n\tTrovato in {record['sources']}")
             if record.get('parent_oi'):
                 print(f"\tOI: {record['parent_oi']['title']} (db_id={record['parent_oi']['neo4j_id']})")
+        elif record_type == "Progetto":
+            print(f"\t{record['title']}\n\tDescrizione: {record['description']}\n\n\tdb_id={record['neo4j_id']}, project_id={record['submission_id']}\n\tTrovato in {record['sources']}")
         else:
             print(f"\t{record['title']}\n\n\tdb_id={record['neo4j_id']}, submission_id={record['submission_id']}\n\tTrovato in {record['sources']}")
 
@@ -99,7 +101,7 @@ if __name__ == "__main__":
         "--types",
         type=str,
         default="",
-        help="comma-separated node labels to restrict to, e.g. 'Contribution,Gap' (default: all types)",
+        help="comma-separated node labels to restrict to, e.g. 'Contribution,Project' (default: all types)",
     )
     args = parser.parse_args()
     main(args)

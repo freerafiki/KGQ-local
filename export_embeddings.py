@@ -9,6 +9,9 @@ unlike `elementId`, and works even for Recommendation/Gap nodes (which have no
 `id` property). If the content of a node changes between export and import, the
 hash won't match and the embedding is simply not re-attached (re-embed it).
 
+The file starts with a meta record identifying the embedding model and its
+dimension count, which import_embeddings.py verifies before importing.
+
 Shared text builders live in embedding_text.py and MUST stay in lockstep with
 insert_embeddings.py.
 
@@ -20,11 +23,12 @@ import argparse
 import hashlib
 import json
 import os
+from datetime import datetime
 
 from dotenv import load_dotenv
 from neo4j import GraphDatabase, RoutingControl
 
-from embedding_text import TEXT_BUILDERS
+from embedding_text import TEXT_BUILDERS, EMBEDDING_MODEL_NAME, EMBEDDING_DIMS
 
 load_dotenv()
 NEO4J_URI = os.getenv("NEO4J_URI")
@@ -40,6 +44,14 @@ def export(out_path: str) -> None:
         with open(out_path, "w") as fh:
             fh.write("[\n")
             first = True
+            # Meta record FIRST so import_embeddings.py can validate model/dims
+            # before touching any data (and before creating a DB connection).
+            json.dump({"meta": {
+                "model": EMBEDDING_MODEL_NAME,
+                "dims": EMBEDDING_DIMS,
+                "created": datetime.now().isoformat(timespec="seconds"),
+            }}, fh)
+            first = False
             for label, fields in TEXT_BUILDERS.items():
                 for field, (raw_fields, builder) in fields.items():
                     aliases = ", ".join(f"n.`{f}` AS `{f}`" for f in raw_fields)

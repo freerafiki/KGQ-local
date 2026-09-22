@@ -66,7 +66,7 @@ def get_lan_ips():
 # the fulltext source (which matches all labels), inject a label WHERE clause.
 # This is a PRE-filter: only candidates of the requested types enter the wRRF
 # fusion, so a small finalK is not starved by "other type" results.
-_ALL_LABELS = ("Contribution", "Recommendation", "Gap")
+_ALL_LABELS = ("Contribution", "Recommendation", "Gap", "Project")
 
 _SOURCES_BY_LABEL = {
     "Contribution": [
@@ -79,6 +79,9 @@ _SOURCES_BY_LABEL = {
     ],
     "Gap": [
         ("gap_embeddings", "queryVector", "gap"),
+    ],
+    "Project": [
+        ("project_embeddings", "queryVector", "project"),
     ],
 }
 
@@ -140,10 +143,13 @@ WITH row, n,
 WITH row, n, mainPurposeNames, secPurposeNames, oiParent,
      [ (oiParent)-[rpm:has_main_function]->(p:Purpose) | p.name ] AS parentMainPurposeNames,
      [ (oiParent)-[rps:has_secondary_function]->(p:Purpose) | p.name ] AS parentSecPurposeNames,
-     [ (ca:ContributionActor)-[rc:contributed_to]->(n) | ca.name ] AS actorNames
+     [ (ca:ContributionActor)-[rc:contributed_to]->(n) | ca.name ]
+     + [ (ca2:ContributionActor)-[rc2:project_contributor]->(n) | ca2.name ] AS actorNames
 RETURN
     n AS n,
     n.title AS title,
+    n.name AS name,
+    n.id_num AS id_num,
     n.description AS abstract,
     n.findings AS findings,
     n.id AS id,
@@ -274,6 +280,8 @@ def _record_type(labels):
         return "Raccomandazione"
     if "Gap" in labels:
         return "Lacuna"
+    if "Project" in labels:
+        return "Progetto"
     return "Full-text"
 
 
@@ -315,7 +323,9 @@ def _serialize(record):
         "sourceRanks": record['sourceRanks'],
         "rawScores": [round(s, 6) for s in record['rawScores']],
         "neo4j_id": record['neo4j_id'],
-        "title": record['title'],
+        # Projects have `name` (no `title`); contributions use `officialTitle`
+        # (aliased to `title` by the query).
+        "title": record['title'] or record['name'],
         # Own purposes first, then the parent OI's (Rec/Gap inherit their OI's
         # purposes, which is what makes purpose filtering meaningful for them).
         "purposes": _purpose_labels(
@@ -336,6 +346,10 @@ def _serialize(record):
         entry.update({"content": record['content'], "motivation": record['motivation']})
     elif entry["type"] == "Lacuna":
         entry.update({"description": record['description']})
+    elif entry["type"] == "Progetto":
+        # Projects carry `id_num` (no `id`) and their body text is `description`.
+        entry.update({"description": record['description'],
+                      "submission_id": record['id_num']})
     else:
         entry.update({"submission_id": record['id']})
     if record['parentNeo4jId'] is not None:
@@ -366,7 +380,8 @@ def run_search(query_text, source_k=10, final_k=20, rrf_constant=60,
 
     Args:
         types: optional list of Neo4j labels to restrict results to
-            ("Contribution", "Recommendation", "Gap"). Empty/None => all types.
+            ("Contribution", "Recommendation", "Gap", "Project"). Empty/None
+            => all types.
 
     Returns:
         {
@@ -445,7 +460,7 @@ def _make_brief(eid, props, labels, rel=None):
         "labels": sorted(labels or []),
         "type": _record_type(labels or []),
         "rel": rel,
-        "title": props.get("officialTitle") or props.get("title"),
+        "title": props.get("officialTitle") or props.get("title") or props.get("name"),
         "content": props.get("content"),
         "description": props.get("description"),
         "motivation": props.get("motivation"),
@@ -523,6 +538,14 @@ def get_node_detail(element_id):
              "purposes": purposes.get(r["ceid"], [])}
             for r in crows
         ]
+    elif "Project" in labels:
+        # Projects link to actors via project_contributor (not contributed_to)
+        # and have no Contribution parent / child Rec/Gap edges.
+        arows, _, _ = driver.execute_query(
+            "MATCH (ca:ContributionActor)-[:project_contributor]->(n) "
+            "WHERE elementId(n) = $eid RETURN ca.name AS name, ca.type AS atype",
+            eid=element_id, database_=NEO4J_GRAPH, routing_=RoutingControl.READ)
+        entry["actors"] = [{"name": r["name"], "type": r["atype"]} for r in arows]
     else:
         prows, _, _ = driver.execute_query(
             "MATCH (parent:Contribution)-[r:recommends|highlights_gap]->(n) "

@@ -4,7 +4,19 @@ embedding model.
 export_embeddings.py and import_embeddings.py both need these builders so the
 join key (sha256 of the embedded text) matches between the two. Keep the
 concatenation/prefixes in lockstep with insert_embeddings.py.
+
+This module is deliberately dependency-free (no sentence-transformers): it is
+imported by export_embeddings.py / import_embeddings.py, which must run WITHOUT
+the model being installed or downloaded. It also owns the embedding model
+identity so query_config.py (model loader), export and import all agree.
 """
+
+# Identity of the embedding model. query_config.py loads THIS model name and
+# re-exports EMBEDDING_DIMS as `embedding_dims`; export_embeddings.py writes it
+# into the JSON meta record and import_embeddings.py refuses files whose
+# meta does not match (wrong model/dims => incompatible vectors).
+EMBEDDING_MODEL_NAME = "BAAI/bge-m3"
+EMBEDDING_DIMS = 1024
 
 
 def _s(value):
@@ -51,6 +63,12 @@ def gap_text(description):
     return _s(description)
 
 
+def project_text(description):
+    """Projects are embedded on their description only (name is indexed
+    full-text separately, see insert_embeddings.py)."""
+    return _s(description)
+
+
 # Which node text each embedding field comes from, for export/import.
 # label -> field -> (cypher field aliases needed, text builder)
 TEXT_BUILDERS = {
@@ -65,6 +83,9 @@ TEXT_BUILDERS = {
     "Gap": {
         "embedding": (["description"], gap_text),
     },
+    "Project": {
+        "embedding": (["description"], project_text),
+    },
 }
 
 # per-label: embedding property -> its "done" status flag
@@ -76,4 +97,5 @@ FIELD_STATUS = {
     },
     "Recommendation": {"embedding": "embeddingStatus"},
     "Gap": {"embedding": "embeddingStatus"},
+    "Project": {"embedding": "embeddingStatus"},
 }

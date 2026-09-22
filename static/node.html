@@ -13,6 +13,7 @@
       --oi: #1a73e8;
       --rec: #188038;
       --gap: #e37400;
+      --prj: #a142f4;
       --bg: #fff;
     }
     * { box-sizing: border-box; }
@@ -41,6 +42,7 @@
     .badge.oi { background: var(--oi); }
     .badge.rec { background: var(--rec); }
     .badge.gap { background: var(--gap); }
+    .badge.prj { background: var(--prj); }
     .badge.ft { background: var(--muted); }
     .name { font-size: 20px; font-weight: 600; color: var(--accent); line-height: 1.35; }
     .section {
@@ -71,7 +73,7 @@
     }
     .link-item:hover { background: #f8f9fa; border-color: var(--accent); }
     .link-item .l-badge { font-size: 11px; font-weight: 700; margin-right: 8px; }
-    .l-badge.oi { color: var(--oi); } .l-badge.rec { color: var(--rec); } .l-badge.gap { color: var(--gap); }
+    .l-badge.oi { color: var(--oi); } .l-badge.rec { color: var(--rec); } .l-badge.gap { color: var(--gap); } .l-badge.prj { color: var(--prj); }
     .link-item .l-title { font-weight: 600; color: var(--accent); }
     .link-item .l-snippet { color: var(--muted); font-size: 13px; margin-top: 4px; overflow-wrap: anywhere; }
     .link-item .l-rel { font-size: 12px; color: var(--muted); margin-top: 4px; }
@@ -91,8 +93,8 @@
 
   <script>
     const API_BASE = location.protocol + '//' + location.hostname + ':28000';
-    const BADGE_CLASS = { 'Oggetto Informativo': 'oi', 'Raccomandazione': 'rec', 'Lacuna': 'gap', 'Full-text': 'ft' };
-    const BADGE_SHORT = { 'Oggetto Informativo': 'OI', 'Raccomandazione': 'Rec', 'Lacuna': 'Gap', 'Full-text': 'FT' };
+    const BADGE_CLASS = { 'Oggetto Informativo': 'oi', 'Raccomandazione': 'rec', 'Lacuna': 'gap', 'Progetto': 'prj', 'Full-text': 'ft' };
+    const BADGE_SHORT = { 'Oggetto Informativo': 'OI', 'Raccomandazione': 'Rec', 'Lacuna': 'Gap', 'Progetto': 'Prj', 'Full-text': 'FT' };
 
     const PROP_LABELS = {
       officialTitle: 'Official Title',
@@ -102,6 +104,15 @@
       findings: 'Findings',
       content: 'Content',
       motivation: 'Motivation',
+      name: 'Name',
+      id_num: 'Project ID',
+      funding_source: 'Funding source',
+      output_types: 'Output types',
+      start_year: 'Start year',
+      end_year: 'End year',
+      start_month: 'Start month',
+      end_month: 'End month',
+      notes: 'Notes',
       decision_type: 'Decision type',
       conditions: 'Conditions',
       knowledge: 'Knowledge',
@@ -265,7 +276,7 @@
 
     function nameOf(d) {
       const p = d.properties || {};
-      return p.officialTitle || p.title || p.content || p.description || 'Unnamed node';
+      return p.officialTitle || p.title || p.content || p.name || p.description || 'Unnamed node';
     }
 
     load();

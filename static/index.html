@@ -15,6 +15,7 @@
       --oi: #1a73e8;
       --rec: #188038;
       --gap: #e37400;
+      --prj: #a142f4;
     }
     * { box-sizing: border-box; }
     html, body { height: 100%; }
@@ -93,6 +94,7 @@
     .dot.oi { background: var(--oi); }
     .dot.rec { background: var(--rec); }
     .dot.gap { background: var(--gap); }
+    .dot.prj { background: var(--prj); }
     .meta { color: var(--muted); font-size: 13px; margin: 0 0 10px; }
     .results { margin-top: 4px; }
     .card {
@@ -111,6 +113,7 @@
     .badge.oi { background: var(--oi); }
     .badge.rec { background: var(--rec); }
     .badge.gap { background: var(--gap); }
+    .badge.prj { background: var(--prj); }
     .badge.ft { background: var(--muted); }
     .preview {
       color: #3c4043; font-size: 14px; line-height: 1.5; margin: 0 0 10px;
@@ -168,6 +171,7 @@
               <label class="chk"><input type="checkbox" id="f-contrib" value="Contribution" checked> <span class="dot oi"></span> Oggetto Informativo (OI)</label>
               <label class="chk"><input type="checkbox" id="f-rec" value="Recommendation" checked> <span class="dot rec"></span> Raccomandazioni (Rec)</label>
               <label class="chk"><input type="checkbox" id="f-gap" value="Gap" checked> <span class="dot gap"></span> Lacune (Gap)</label>
+              <label class="chk"><input type="checkbox" id="f-prj" value="Project" checked> <span class="dot prj"></span> Progetti (Prj)</label>
             </div>
           </details>
 
@@ -240,16 +244,19 @@
       'Oggetto Informativo': 'oi',
       'Raccomandazione':     'rec',
       'Lacuna':              'gap',
+      'Progetto':            'prj',
     };
     const BADGE_SHORT = {
       'Oggetto Informativo': 'OI',
       'Raccomandazione':     'Rec',
       'Lacuna':              'Gap',
+      'Progetto':            'Prj',
     };
     const FILTER_TO_TYPE = {
       'Contribution':    'Oggetto Informativo',
       'Recommendation':  'Raccomandazione',
       'Gap':             'Lacuna',
+      'Project':         'Progetto',
     };
 
     let allResults = [];
@@ -456,6 +463,7 @@
       if (r.type === 'Oggetto Informativo') return r.abstract || '';
       if (r.type === 'Raccomandazione')    return r.content || r.title || '';
       if (r.type === 'Lacuna')             return r.description || r.title || '';
+      if (r.type === 'Progetto')           return r.description || r.title || '';
       return r.title || '';
     }
 
@@ -469,6 +477,9 @@
                (r.motivation ? '<div class="field"><span class="flabel">Motivazione:</span> ' + escapeHtml(r.motivation) + '</div>' : '');
       }
       if (r.type === 'Lacuna') {
+        return '<div class="field"><span class="flabel">Descrizione:</span> ' + escapeHtml(r.description || '') + '</div>';
+      }
+      if (r.type === 'Progetto') {
         return '<div class="field"><span class="flabel">Descrizione:</span> ' + escapeHtml(r.description || '') + '</div>';
       }
       return '<div class="field">' + escapeHtml(nameOf(r)) + '</div>';

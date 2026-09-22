@@ -28,7 +28,7 @@ import query_util
 
 
 class FilterModel(BaseModel):
-    types: list[Literal["Contribution", "Recommendation", "Gap"]] = Field(
+    types: list[Literal["Contribution", "Recommendation", "Gap", "Project"]] = Field(
         default=[], description="Node labels to restrict results to; empty = all types"
     )
 

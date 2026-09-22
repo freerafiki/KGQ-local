@@ -1,8 +1,13 @@
-# EMBEDDING MODEL 
+# EMBEDDING MODEL
+# Model identity lives in embedding_text.py (dependency-free) so that
+# export_embeddings.py / import_embeddings.py can verify it without loading
+# sentence-transformers. Only the model OBJECT is created here.
 from sentence_transformers import SentenceTransformer
 
-embedding_model = SentenceTransformer("BAAI/bge-m3")
-embedding_dims = 1024
+from embedding_text import EMBEDDING_MODEL_NAME, EMBEDDING_DIMS
+
+embedding_model = SentenceTransformer(EMBEDDING_MODEL_NAME)
+embedding_dims = EMBEDDING_DIMS
 
 
 sourceWeights_default = {
@@ -12,6 +17,7 @@ sourceWeights_default = {
     'OI_subtitle': 0.8,  
     'recommendation': 1.0,
     'gap': 1.0,
+    'project': 1.0,
     'authors': 1.0,
 }
 sourceWeights_shortText = {
@@ -21,6 +27,7 @@ sourceWeights_shortText = {
     'OI_subtitle': 1.0,  
     'recommendation': 0.5,
     'gap': 0.5,
+    'project': 1.0,
     'authors': 1.0,
 }
 sourceWeights_longText = {
@@ -30,6 +37,7 @@ sourceWeights_longText = {
     'OI_subtitle': 0.6,  
     'recommendation': 1.5,
     'gap': 1.5,
+    'project': 1.0,
     'authors': 1.0,
 }
 def chooseSourceWeights(query: str):
