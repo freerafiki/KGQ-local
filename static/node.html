@@ -92,7 +92,11 @@
   </div>
 
   <script>
-    const API_BASE = location.protocol + '//' + location.hostname + ':28000';
+    // Same rule as index.html: dev static server (28080/8080) hits :28000
+    // directly, any other origin goes same-origin through the reverse proxy.
+    const API_BASE = (location.port === '28080' || location.port === '8080')
+      ? location.protocol + '//' + location.hostname + ':28000'
+      : '';
     const BADGE_CLASS = { 'Oggetto Informativo': 'oi', 'Raccomandazione': 'rec', 'Lacuna': 'gap', 'Progetto': 'prj', 'Full-text': 'ft' };
     const BADGE_SHORT = { 'Oggetto Informativo': 'OI', 'Raccomandazione': 'Rec', 'Lacuna': 'Gap', 'Progetto': 'Prj', 'Full-text': 'FT' };
 

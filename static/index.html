@@ -224,10 +224,13 @@
   </div>
 
   <script>
-    // API host derives from how the page was opened (localhost:28080 locally,
-    // http:<LAN ip>:28080 for visitors on the same network). Port stays 28000
-    // and must be reachable from wherever the page is accessed.
-    const API_BASE = location.protocol + '//' + location.hostname + ':28000';
+    // API base (index.html and node.html share this rule):
+    //  - served by the dev static server (28080/8080) → talk to uvicorn directly on :28000
+    //  - served by the production web server (Apache, 80/443 or any other port)
+    //    → same-origin, i.e. the reverse proxy forwards /search, /node, /health
+    const API_BASE = (location.port === '28080' || location.port === '8080')
+      ? location.protocol + '//' + location.hostname + ':28000'
+      : '';
 
     const form       = document.getElementById('search-form');
     const qInput     = document.getElementById('q');
