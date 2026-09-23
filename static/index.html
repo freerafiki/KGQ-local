@@ -264,6 +264,9 @@
 
     let allResults = [];
     let lastQuery  = '';
+    // Timings of the last successful API response (kept so re-renders caused
+    // by the client-side filters keep showing them instead of 0.000).
+    let lastTimings = {};
     let selectedActors = new Set();
     let actorNames = [];
 
@@ -308,7 +311,7 @@
         passesAxis(r.purposes || [], purposeActive) &&
         passesActorFilter(r.actors || [], actorQuery, selected)
       );
-      render(visible, { all: allResults });
+      render(visible, { all: allResults, ...lastTimings });
     }
 
     // Both constraints apply when set: a live-typed query (substring) and the
@@ -413,8 +416,12 @@
         const data = await res.json();
         lastQuery  = query;
         allResults = data.results || [];
+        lastTimings = {
+          embedding_time_s: data.embedding_time_s,
+          search_time_s:    data.search_time_s,
+        };
         seedActorList(allResults);
-        render(allResults, { all: allResults });
+        render(allResults, { all: allResults, ...lastTimings });
       } catch (err) {
         metaEl.textContent = '';
         resultsEl.innerHTML = '<div class="error">Search failed: ' + escapeHtml(String(err.message || err)) + '</div>';
