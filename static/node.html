@@ -80,6 +80,21 @@
     .error { color: #d93025; text-align: center; padding: 40px 0; }
     .loading { color: var(--muted); text-align: center; padding: 40px 0; }
     .sub { font-size: 13px; color: var(--muted); }
+    /* Overview rows (C2/A1/A2/A3a/A3b/C3/A4/actors) reuse the props table. */
+    table.props td.v .tags { margin: 0; }
+    table.props td.v .actor-list { margin: 0; }
+    .url-item { font-size: 14px; padding: 3px 0; overflow-wrap: anywhere; }
+    .url-item a { color: var(--accent); text-decoration: none; }
+    .url-item a:hover { text-decoration: underline; }
+    .rel-list { list-style: none; margin: 0; padding: 0; }
+    .rel-item { font-size: 14px; padding: 5px 0; border-top: 1px solid var(--card-border); }
+    .rel-list .rel-item:first-child { border-top: none; padding-top: 0; }
+    .rel-item a { color: var(--accent); text-decoration: none; overflow-wrap: anywhere; }
+    .rel-item a:hover { text-decoration: underline; }
+    .rel-extra { color: var(--muted); font-size: 12px; margin-top: 2px; overflow-wrap: anywhere; }
+    details.more { margin-top: 6px; font-size: 13px; }
+    details.more summary { cursor: pointer; color: var(--accent); }
+    details.more .rel-list, details.more .url-item { margin-top: 6px; }
   </style>
 </head>
 <body>
@@ -143,6 +158,21 @@
       note: 'Note',
       future_work: 'Future work',
       intervals_year_month_1: 'Time intervals',
+      // Related-node fields (they arrive in `related`, not in `properties`)
+      URL: 'URL',
+      url: 'URL',
+      physicalArchive: 'Physical archive',
+      email: 'Email',
+      institution: 'Institution',
+      surname: 'Surname',
+      referencePerson: 'Reference person',
+      acronym: 'Acronym',
+      type: 'Type',
+      action: 'Action',
+      example: 'Example',
+      full_text: 'Full text',
+      details: 'Details',
+      other_name: 'Other name',
     };
 
     const eid = new URLSearchParams(location.search).get('eid');
@@ -203,52 +233,110 @@
       }
     }
 
+    // Field order for the detail page: C2 title, A1 (Italian), A2 subtitle,
+    // A3a abstract, A3b findings, grant, validity period, C3 URL/DOI, A4 main
+    // purpose, secondary purpose, contributors split into people /
+    // institutions - and only then everything else. The remaining own fields
+    // render as "Additional Properties" below the connected Recs/Gaps, just
+    // above "Assisted by / Reviewed by" and the embedding status.
+    const OVERVIEW_URL_LIMIT = 10;
+    const REL_LIST_LIMIT = 12;
+
     function render(d) {
-      document.title = 'Node details · KGQ Search';
       const badgeClass = BADGE_CLASS[d.type] || 'ft';
-      const propsRows = Object.entries(d.properties)
-        .filter(([k]) => !k.endsWith('EmbeddingStatus'))
-        .map(([k, v]) =>
-          '<tr><td class="k">' + esc(PROP_LABELS[k] || k) + '</td><td class="v">' + formatValue(v) + '</td></tr>'
-        ).join('');
-      const vectorRows = Object.entries(d.vectorProps).map(([k, dim]) =>
-        '<tr><td class="k">' + esc(PROP_LABELS[k] || k) + '</td><td class="v">' + dim + '-dim vector</td></tr>'
-      ).join('');
+      const props = d.properties || {};
+      const related = d.related || {};
+      const isOI = (d.labels || []).includes('Contribution');
+      const nodeName = nameOf(d);
+      document.title = truncate(nodeName, 120) + ' \u00B7 KGQ Search';
 
       let html = '';
       html += '<div class="header">' +
         '<span class="badge ' + badgeClass + '">' + esc(BADGE_SHORT[d.type] || 'FT') + '</span>' +
-        '<span class="name">' + esc(nameOf(d)) + '</span>' +
+        '<span class="name">' + esc(nodeName) + '</span>' +
         '</div>';
 
-      // Properties
-      html += '<div class="section"><h2>Properties</h2>' +
-        (propsRows || vectorRows
-          ? '<table class="props">' + propsRows + vectorRows + '</table>'
-          : '<div class="empty">No stored properties.</div>') +
-        '</div>';
+      // ---- 1. Overview, in the requested order ----------------------
+      const overviewFields = [
+        ['officialTitle', 'Official title (C2)'],
+        ['title',         'Title (A1) \u00B7 Italian'],
+        ['name',          'Name'],
+        ['subtitle',      'Subtitle (A2)'],
+        ['description',   isOI ? 'Abstract (A3a)' : 'Description'],
+        ['findings',      'Findings (A3b)'],
+        ['content',       'Content'],
+        ['grant',         'Grant'],
+        ['validityPeriod','Validity period'],
+      ];
+      const overviewKeys = new Set(overviewFields.map(([k]) => k));
+      const overviewRows = [];
+      overviewFields.forEach(([k, label]) => {
+        const v = props[k];
+        if (v == null || (typeof v === 'string' && !v.trim())) return;
+        overviewRows.push('<tr><td class="k">' + esc(label) +
+          '</td><td class="v">' + formatValue(v) + '</td></tr>');
+      });
 
-      // Statuses (embeddings bookkeeping, small)
-      const statusRows = Object.entries(d.properties).filter(([k]) => k.endsWith('EmbeddingStatus'));
-      if (statusRows.length) {
-        html += '<div class="section"><h2>Embedding status</h2><table class="props">' +
-          statusRows.map(([k, v]) => '<tr><td class="k">' + esc(k) + '</td><td class="v">' + esc(v) + '</td></tr>').join('') +
-          '</table></div>';
+      // C3 URL/DOI: relationship-linked Reference nodes (not a property).
+      const refs = (related.references && related.references.items) || [];
+      if (refs.length) {
+        overviewRows.push('<tr><td class="k">URL/DOI (C3)</td><td class="v">' +
+          urlList(refs) + '</td></tr>');
       }
 
-      // Purpose tags
-      if (d.purposes && d.purposes.length) {
-        html += '<div class="section"><h2>Main purpose</h2><div class="tags">' +
-          d.purposes.map(p => '<span class="tag">' + esc(p) + '</span>').join('') +
-          '</div></div>';
+      // A4 main purpose (has_main_function) + its secondary functions.
+      const mainPurposes = (d.mainPurposes && d.mainPurposes.length)
+        ? d.mainPurposes
+        : (d.purposes || []);
+      if (mainPurposes.length) {
+        overviewRows.push('<tr><td class="k">Main purpose (A4)</td><td class="v">' +
+          tagList(mainPurposes) + '</td></tr>');
+      }
+      if (d.secPurposes && d.secPurposes.length) {
+        overviewRows.push('<tr><td class="k">Secondary purpose</td><td class="v">' +
+          tagList(d.secPurposes) + '</td></tr>');
       }
 
-      // Contributors
-      if (d.actors && d.actors.length) {
-        html += '<div class="section"><h2>Contributors</h2><ul class="actor-list">' +
-          d.actors.map(a => '<li>' + esc(a.name) + (a.type ? ' <span class="sub">(' + esc(a.type) + ')</span>' : '') + '</li>').join('') +
-          '</ul></div>';
+      // contributionActors, split by their ContributionActor.type.
+      const actors = d.actors || [];
+      const isInst = (a) => String(a.type || '').toLowerCase() === 'institution';
+      const people = actors.filter((a) => !isInst(a));
+      const insts = actors.filter(isInst);
+      if (people.length) {
+        overviewRows.push('<tr><td class="k">Contributors (people)</td><td class="v">' +
+          actorList(people) + '</td></tr>');
       }
+      if (insts.length) {
+        overviewRows.push('<tr><td class="k">Contributors (institutions)</td><td class="v">' +
+          actorList(insts) + '</td></tr>');
+      }
+
+      if (overviewRows.length) {
+        html += '<div class="section"><h2>Details</h2><table class="props">' +
+          overviewRows.join('') + '</table></div>';
+      }
+
+      // ---- 2. Everything else --------------------------------------
+      // Rendered further down, after the connected Recs/Gaps.
+      const propRows = Object.entries(props)
+        .filter(([k]) => !isStatusKey(k) && !overviewKeys.has(k))
+        .map(([k, v]) =>
+          '<tr><td class="k">' + esc(PROP_LABELS[k] || k) + '</td><td class="v">' + formatValue(v) + '</td></tr>'
+        ).join('');
+      const vectorRows = Object.entries(d.vectorProps || {}).map(([k, dim]) =>
+        '<tr><td class="k">' + esc(PROP_LABELS[k] || k) + '</td><td class="v">' + dim + '-dim vector</td></tr>'
+      ).join('');
+
+      // Remaining relationship-linked fields, in the backend's display order.
+      // (`references` is the C3 row, `user` renders at the bottom as
+      // "Assisted by" / "Reviewed by".)
+      Object.keys(related).forEach((key) => {
+        if (key === 'references' || key === 'user') return;
+        const group = related[key];
+        if (!group || !group.items || !group.items.length) return;
+        html += '<div class="section"><h2>' + esc(group.label) + '</h2>' +
+          itemList(group.items) + '</div>';
+      });
 
       // Parent OI (for Rec/Gap)
       if (d.parents && d.parents.length) {
@@ -270,8 +358,119 @@
         }
       }
 
+      // Remaining own properties: below the connected Recs/Gaps, above
+      // "Assisted by / Reviewed by".
+      if (propRows || vectorRows) {
+        html += '<div class="section"><h2>Additional Properties</h2><table class="props">' +
+          propRows + vectorRows + '</table></div>';
+      } else if (!overviewRows.length) {
+        html += '<div class="section"><div class="empty">No stored properties.</div></div>';
+      }
+
+      // Assisted by / Reviewed by, then the embedding bookkeeping: the very
+      // bottom of the page (after the connected Recs/Gaps).
+      const assisted = (related.user && related.user.items) || [];
+      html += '<div class="section"><h2>Assisted by / Reviewed by</h2><table class="props">' +
+        '<tr><td class="k">Assisted by</td><td class="v">' +
+        (assisted.length ? itemList(assisted) : '<span class="sub">Nobody recorded yet.</span>') +
+        '</td></tr>' +
+        '<tr><td class="k">Reviewed by</td><td class="v">' +
+        '<span class="sub">No reviewer recorded yet.</span>' +
+        '</td></tr>' +
+        '</table></div>';
+
+      // Statuses (embeddings bookkeeping, small)
+      const statusRows = Object.entries(props).filter(([k]) => isStatusKey(k));
+      if (statusRows.length) {
+        html += '<div class="section"><h2>Embedding status</h2><table class="props">' +
+          statusRows.map(([k, v]) => '<tr><td class="k">' + esc(k) + '</td><td class="v">' + esc(v) + '</td></tr>').join('') +
+          '</table></div>';
+      }
+
       html += '<div class="sub">db_id: ' + esc(d.eid) + '</div>';
       document.getElementById('content').innerHTML = html;
+    }
+
+    // `embeddingStatus` (Rec/Gap/Project) and `*EmbeddingStatus` (Contribution).
+    function isStatusKey(k) {
+      return /embeddingStatus$/i.test(k);
+    }
+
+    function tagList(items) {
+      return '<div class="tags">' +
+        items.map(p => '<span class="tag">' + esc(p) + '</span>').join('') + '</div>';
+    }
+
+    // The row label already says people/institutions, so no type suffix here.
+    function actorList(actors) {
+      return '<ul class="actor-list">' +
+        actors.map(a => '<li>' + esc(a.name) + '</li>').join('') + '</ul>';
+    }
+
+    // Only http(s) links are clickable; anything else renders as plain text.
+    function safeHref(url) {
+      const u = String(url == null ? '' : url).trim();
+      return /^https?:\/\//i.test(u) ? u : '';
+    }
+
+    function plainValue(v) {
+      if (Array.isArray(v)) return v.join(', ');
+      if (v && typeof v === 'object') return JSON.stringify(v);
+      return String(v == null ? '' : v);
+    }
+
+    // `showLabel` is for rows whose heading is the URL itself, where the
+    // Reference name is still worth keeping as a caption.
+    function extraLine(item, showLabel) {
+      const bits = [];
+      if (showLabel && item.label && item.label !== item.url) bits.push(item.label);
+      Object.keys(item.props || {}).forEach((k) => {
+        bits.push((PROP_LABELS[k] || k) + ': ' + truncate(plainValue(item.props[k]), 160));
+      });
+      return bits.length
+        ? '<div class="rel-extra">' + esc(bits.join(' \u00B7 ')) + '</div>'
+        : '';
+    }
+
+    function urlList(items) {
+      const head = items.slice(0, OVERVIEW_URL_LIMIT);
+      const rest = items.slice(OVERVIEW_URL_LIMIT);
+      let out = head.map(urlItem).join('');
+      if (rest.length) {
+        out += '<details class="more"><summary>Show ' + rest.length + ' more</summary>' +
+          rest.map(urlItem).join('') + '</details>';
+      }
+      return out;
+    }
+
+    function urlItem(item) {
+      const href = safeHref(item.url);
+      if (href) {
+        return '<div class="url-item">' +
+          '<a href="' + esc(href) + '" target="_blank" rel="noopener">' + esc(item.url) + '</a>' +
+          extraLine(item, true) + '</div>';
+      }
+      // No usable URL (e.g. a physical archive only): plain text + its details.
+      return '<div class="url-item">' + esc(item.label || '') + extraLine(item, false) + '</div>';
+    }
+
+    function itemList(items) {
+      const head = items.slice(0, REL_LIST_LIMIT);
+      const rest = items.slice(REL_LIST_LIMIT);
+      let out = '<ul class="rel-list">' + head.map(relItem).join('') + '</ul>';
+      if (rest.length) {
+        out += '<details class="more"><summary>Show ' + rest.length + ' more</summary>' +
+          '<ul class="rel-list">' + rest.map(relItem).join('') + '</ul></details>';
+      }
+      return out;
+    }
+
+    function relItem(item) {
+      const href = safeHref(item.url);
+      const head = href
+        ? '<a href="' + esc(href) + '" target="_blank" rel="noopener">' + esc(item.label) + '</a>'
+        : esc(item.label);
+      return '<li class="rel-item">' + head + extraLine(item) + '</li>';
     }
 
     function nameOf(d) {

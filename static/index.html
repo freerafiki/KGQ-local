@@ -188,12 +188,21 @@
             </div>
           </details>
 
-          <details class="filter-group" id="actor-group">
-            <summary>Contributor</summary>
+          <details class="filter-group" id="person-group">
+            <summary>People</summary>
             <div class="group-body">
-              <input type="text" id="actor-input" class="actor-input" placeholder="Type to filter\u2026" autocomplete="off">
-              <div id="actor-list" class="actor-list"></div>
-              <div id="actor-chips" class="actor-chips"></div>
+              <input type="text" id="person-input" class="actor-input" placeholder="Type to filter…" autocomplete="off">
+              <div id="person-list" class="actor-list"></div>
+              <div id="person-chips" class="actor-chips"></div>
+            </div>
+          </details>
+
+          <details class="filter-group" id="institution-group">
+            <summary>Institutions</summary>
+            <div class="group-body">
+              <input type="text" id="institution-input" class="actor-input" placeholder="Type to filter…" autocomplete="off">
+              <div id="institution-list" class="actor-list"></div>
+              <div id="institution-chips" class="actor-chips"></div>
             </div>
           </details>
 
@@ -236,9 +245,6 @@
     const resultsEl  = document.getElementById('results');
     const filterCheckboxes = document.querySelectorAll('#type-group .chk input');
     const purposeCheckboxes = document.querySelectorAll('#purpose-group .chk input');
-    const actorInput  = document.getElementById('actor-input');
-    const actorListEl  = document.getElementById('actor-list');
-    const actorChipsEl = document.getElementById('actor-chips');
 
     const BADGE_CLASS = {
       'Oggetto Informativo': 'oi',
@@ -261,8 +267,6 @@
 
     let allResults = [];
     let lastQuery  = '';
-    let selectedActors = new Set();
-    let actorNames = [];
 
     form.addEventListener('submit', (e) => { e.preventDefault(); search(); });
 
@@ -271,7 +275,6 @@
     // unchecking one hides results carrying that tag.
     filterCheckboxes.forEach(cb => cb.addEventListener('change', renderFiltered));
     purposeCheckboxes.forEach(cb => cb.addEventListener('change', renderFiltered));
-    actorInput.addEventListener('input', () => { renderActorList(); renderFiltered(); });
 
     function activeFilterTypes() {
       return Array.from(filterCheckboxes)
@@ -298,12 +301,12 @@
       if (!lastQuery) return;
       const typeActive = activeFilterTypes();
       const purposeActive = activePurposes();
-      const actorQuery = actorInput.value.trim().toLowerCase();
-      const selected = Array.from(selectedActors);
       const visible = allResults.filter(r =>
         passesAxis([r.type], typeActive) &&
         passesAxis(r.purposes || [], purposeActive) &&
-        passesActorFilter(r.actors || [], actorQuery, selected)
+        // People and Institutions are independent axes: a result has to
+        // satisfy every facet that has a query or a selection.
+        actorFacets.every(f => f.passes(r))
       );
       render(visible, { all: allResults });
     }
@@ -316,55 +319,103 @@
       return true;
     }
 
-    function seedActorList(results) {
-      const names = [];
-      results.forEach(r => (r.actors || []).forEach(a => { if (!names.includes(a)) names.push(a); }));
-      actorNames = names.sort((a, b) => a.localeCompare(b));
-      selectedActors = new Set(Array.from(selectedActors).filter(s => actorNames.includes(s)));
-      renderActorList();
-      renderChips();
+    // ---- Contributor filters -------------------------------------
+    // The single "Contributor" filter is now two facets sharing one shape:
+    // a searchable checkbox list (live substring query + OR-ed selections).
+    // Each facet reads a different payload field (people vs institutions),
+    // and the facets are combined with AND, so a result has to satisfy every
+    // facet that actually constrains something (a query or a selection).
+    function makeFacet(cfg) {
+      const facet = {
+        pick:     cfg.pick,          // names this facet sees on one result
+        input:    document.getElementById(cfg.input),
+        listEl:   document.getElementById(cfg.list),
+        chipsEl:  document.getElementById(cfg.chips),
+        emptyMsg: cfg.emptyMsg,
+        names:    [],                // all names of this facet in the result set
+        selected: new Set(),
+      };
+
+      facet.query = () => facet.input.value.trim().toLowerCase();
+
+      facet.seed = (results) => {
+        const names = [];
+        results.forEach(r => facet.pick(r).forEach(a => {
+          if (!names.includes(a)) names.push(a);
+        }));
+        facet.names = names.sort((a, b) => a.localeCompare(b));
+        facet.selected = new Set(
+          Array.from(facet.selected).filter(s => facet.names.includes(s)));
+        facet.renderList();
+        facet.renderChips();
+      };
+
+      facet.renderList = () => {
+        const q = facet.query();
+        const matches = q ? facet.names.filter(n => n.toLowerCase().includes(q)) : facet.names;
+        if (!matches.length) {
+          facet.listEl.innerHTML = '<div class="actor-empty">' + facet.emptyMsg + '</div>';
+          return;
+        }
+        facet.listEl.innerHTML = matches.map(n =>
+          '<label class="actor-item"><input type="checkbox" value="' + escapeHtml(n) + '"' +
+          (facet.selected.has(n) ? ' checked' : '') + '> ' + escapeHtml(n) + '</label>'
+        ).join('');
+      };
+
+      facet.renderChips = () => {
+        facet.chipsEl.innerHTML = Array.from(facet.selected).map(n =>
+          '<span class="chip">' + escapeHtml(n) +
+          '<button type="button" title="Remove" data-actor="' + escapeHtml(n) + '">' + '\u00D7' + '</button></span>'
+        ).join('');
+      };
+
+      facet.passes = (r) =>
+        passesActorFilter(facet.pick(r), facet.query(), Array.from(facet.selected));
+
+      facet.input.addEventListener('input', () => { facet.renderList(); renderFiltered(); });
+
+      // Toggle selections via checkbox input events (delegated).
+      facet.listEl.addEventListener('change', (e) => {
+        const cb = e.target.closest('input[type="checkbox"]');
+        if (!cb) return;
+        if (cb.checked) facet.selected.add(cb.value);
+        else facet.selected.delete(cb.value);
+        facet.renderList();   // refresh checkbox state (list already re-filtered)
+        facet.renderChips();
+        renderFiltered();
+      });
+
+      // Remove a chip.
+      facet.chipsEl.addEventListener('click', (e) => {
+        const btn = e.target.closest('button[data-actor]');
+        if (!btn) return;
+        facet.selected.delete(btn.getAttribute('data-actor'));
+        facet.renderList();
+        facet.renderChips();
+        renderFiltered();
+      });
+
+      return facet;
     }
 
-    function renderActorList() {
-      const q = actorInput.value.trim().toLowerCase();
-      const matches = q ? actorNames.filter(n => n.toLowerCase().includes(q)) : actorNames;
-      if (!matches.length) {
-        actorListEl.innerHTML = '<div class="actor-empty">No matching contributors.</div>';
-        return;
-      }
-      actorListEl.innerHTML = matches.map(n =>
-        '<label class="actor-item"><input type="checkbox" value="' + escapeHtml(n) + '"' +
-        (selectedActors.has(n) ? ' checked' : '') + '> ' + escapeHtml(n) + '</label>'
-      ).join('');
+    const actorFacets = [
+      // Older payloads without the split fall back to the merged name list.
+      makeFacet({
+        pick:     r => r.people || r.actors || [],
+        input:    'person-input', list: 'person-list', chips: 'person-chips',
+        emptyMsg: 'No matching people.',
+      }),
+      makeFacet({
+        pick:     r => r.institutions || [],
+        input:    'institution-input', list: 'institution-list', chips: 'institution-chips',
+        emptyMsg: 'No matching institutions.',
+      }),
+    ];
+
+    function seedActorLists(results) {
+      actorFacets.forEach(f => f.seed(results));
     }
-
-    function renderChips() {
-      actorChipsEl.innerHTML = Array.from(selectedActors).map(n =>
-        '<span class="chip">' + escapeHtml(n) +
-        '<button type="button" title="Remove" data-actor="' + escapeHtml(n) + '">\u00D7</button></span>'
-      ).join('');
-    }
-
-    // Toggle selections via checkbox input events (delegated).
-    actorListEl.addEventListener('change', (e) => {
-      const cb = e.target.closest('input[type="checkbox"]');
-      if (!cb) return;
-      if (cb.checked) selectedActors.add(cb.value);
-      else selectedActors.delete(cb.value);
-      renderActorList();   // refresh checkbox state (list already re-filtered)
-      renderChips();
-      renderFiltered();
-    });
-
-    // Remove a chip.
-    actorChipsEl.addEventListener('click', (e) => {
-      const btn = e.target.closest('button[data-actor]');
-      if (!btn) return;
-      selectedActors.delete(btn.getAttribute('data-actor'));
-      renderActorList();
-      renderChips();
-      renderFiltered();
-    });
 
     // Delegate card clicks (works for re-rendered cards): "Show more/less"
     // toggling stops propagation, any other click opens the detail page.
@@ -410,7 +461,7 @@
         const data = await res.json();
         lastQuery  = query;
         allResults = data.results || [];
-        seedActorList(allResults);
+        seedActorLists(allResults);
         render(allResults, { all: allResults });
       } catch (err) {
         metaEl.textContent = '';
@@ -448,8 +499,10 @@
       return parts.join(', ');
     }
 
+    // Card headline = C2 (English) when present; Rec/Gap/Project have no
+    // officialTitle, so they fall back to their body text.
     function nameOf(r) {
-      return r.title || r.content || r.description || 'Unnamed result';
+      return r.officialTitle || r.title || r.content || r.description || 'Unnamed result';
     }
 
     function truncate(s, maxLen) {
@@ -517,7 +570,7 @@
           : '';
         const parentHtml = (r.type !== 'Oggetto Informativo') && r.parent_oi
           ? '<div class="parent-row"><span class="plabel">OI:</span> ' +
-            escapeHtml(truncate(r.parent_oi.title, 120)) + '</div>'
+            escapeHtml(truncate(r.parent_oi.officialTitle || r.parent_oi.title, 120)) + '</div>'
           : '';
         return '' +
           '<div class="card" data-eid="' + escapeHtml(r.neo4j_id) + '">' +

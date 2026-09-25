@@ -143,11 +143,12 @@ WITH row, n,
 WITH row, n, mainPurposeNames, secPurposeNames, oiParent,
      [ (oiParent)-[rpm:has_main_function]->(p:Purpose) | p.name ] AS parentMainPurposeNames,
      [ (oiParent)-[rps:has_secondary_function]->(p:Purpose) | p.name ] AS parentSecPurposeNames,
-     [ (ca:ContributionActor)-[rc:contributed_to]->(n) | ca.name ]
-     + [ (ca2:ContributionActor)-[rc2:project_contributor]->(n) | ca2.name ] AS actorNames
+     [ (ca:ContributionActor)-[rc:contributed_to]->(n) | {name: ca.name, type: ca.type} ]
+     + [ (ca2:ContributionActor)-[rc2:project_contributor]->(n) | {name: ca2.name, type: ca2.type} ] AS actorEntries
 RETURN
     n AS n,
     n.title AS title,
+    n.officialTitle AS officialTitle,
     n.name AS name,
     n.id_num AS id_num,
     n.description AS abstract,
@@ -163,12 +164,13 @@ RETURN
     mainPurposeNames AS mainPurposeNames,
     secPurposeNames AS secPurposeNames,
     oiParent.title AS parentTitle,
+    oiParent.officialTitle AS parentOfficialTitle,
     oiParent.id AS parentId,
     labels(oiParent) AS parentLabels,
     elementId(oiParent) AS parentNeo4jId,
     parentMainPurposeNames AS parentMainPurposeNames,
     parentSecPurposeNames AS parentSecPurposeNames,
-    actorNames AS actorNames,
+    actorEntries AS actorEntries,
     row.wrrf AS wrrf
 ORDER BY row.wrrf DESC, n.id ASC;
 """
@@ -311,10 +313,44 @@ def _purpose_labels(names):
     return labels
 
 
+def _split_actors(entries):
+    """Unique actor names, plus the same names split by ContributionActor.type.
+
+    Returns `(actors, people, institutions)`:
+      - `actors`      -> every name once, for the result cards;
+      - `people`      -> names whose actor is a person (or has no type);
+      - `institutions`-> names whose actor is an institution.
+
+    The index page needs the split to offer two separate contributor filters;
+    the detail page does the same split from `ContributionActor.type`.
+    """
+    seen, people_seen, inst_seen = set(), set(), set()
+    actors, people, institutions = [], [], []
+    for entry in entries or []:
+        name = entry.get("name")
+        if not name:
+            continue
+        kind = (entry.get("type") or "").lower()
+        if (name, kind) in seen:
+            continue
+        seen.add((name, kind))
+        if name not in actors:
+            actors.append(name)
+        if kind == "institution":
+            if name not in inst_seen:
+                inst_seen.add(name)
+                institutions.append(name)
+        elif name not in people_seen:
+            people_seen.add(name)
+            people.append(name)
+    return actors, people, institutions
+
+
 def _serialize(record):
     """Turn a raw Neo4j record (w/ Node) into a plain JSON-able dict."""
     sources = record['sources']
     labels = list(record['n'].labels)
+    actors, people, institutions = _split_actors(record['actorEntries'])
     entry = {
         "type": _record_type(labels),
         "labels": labels,
@@ -323,9 +359,10 @@ def _serialize(record):
         "sourceRanks": record['sourceRanks'],
         "rawScores": [round(s, 6) for s in record['rawScores']],
         "neo4j_id": record['neo4j_id'],
-        # Projects have `name` (no `title`); contributions use `officialTitle`
-        # (aliased to `title` by the query).
+        # Projects have `name` (no `title`); Contributions carry BOTH
+        # `officialTitle` (C2, English) and `title` (A1, Italian).
         "title": record['title'] or record['name'],
+        "officialTitle": record['officialTitle'] or record['title'] or record['name'],
         # Own purposes first, then the parent OI's (Rec/Gap inherit their OI's
         # purposes, which is what makes purpose filtering meaningful for them).
         "purposes": _purpose_labels(
@@ -334,7 +371,10 @@ def _serialize(record):
             + record['parentMainPurposeNames']
             + record['parentSecPurposeNames']
         ),
-        "actors": list(dict.fromkeys(record['actorNames'] or [])),
+        "actors": actors,
+        # Contributor filters: people and institutions, kept apart.
+        "people": people,
+        "institutions": institutions,
     }
     if entry["type"] == "Oggetto Informativo":
         entry.update({
@@ -355,7 +395,9 @@ def _serialize(record):
     if record['parentNeo4jId'] is not None:
         entry["parent_oi"] = {
             "labels": list(record['parentLabels'] or []),
+            # A1 (IT) in `title`, C2 (EN) in `officialTitle`.
             "title": record['parentTitle'],
+            "officialTitle": record['parentOfficialTitle'] or record['parentTitle'],
             "id": record['parentId'],
             "neo4j_id": record['parentNeo4jId'],
         }
@@ -461,6 +503,9 @@ def _make_brief(eid, props, labels, rel=None):
         "type": _record_type(labels or []),
         "rel": rel,
         "title": props.get("officialTitle") or props.get("title") or props.get("name"),
+        # A1 (Italian) kept alongside the C2 English title.
+        "title_it": props.get("title"),
+        "officialTitle": props.get("officialTitle") or props.get("title"),
         "content": props.get("content"),
         "description": props.get("description"),
         "motivation": props.get("motivation"),
@@ -481,6 +526,173 @@ def _fetch_purposes(eids):
     return {r["eid"]: _purpose_labels(r["names"]) for r in rows}
 
 
+def _fetch_purpose_split(element_id):
+    """(main, secondary) purpose labels for ONE node.
+
+    The UI shows A4 main purpose at the top of the detail page and the
+    secondary functions later, so they must arrive separately.
+    """
+    driver = get_driver()
+    rows, _, _ = driver.execute_query(
+        "MATCH (n) WHERE elementId(n) = $eid "
+        "OPTIONAL MATCH (n)-[:has_main_function]->(mp:Purpose) "
+        "OPTIONAL MATCH (n)-[:has_secondary_function]->(sp:Purpose) "
+        "RETURN collect(DISTINCT mp.name) AS main, collect(DISTINCT sp.name) AS sec",
+        eid=element_id, database_=NEO4J_GRAPH, routing_=RoutingControl.READ)
+    if not rows:
+        return [], []
+    main = _purpose_labels([n for n in rows[0]["main"] if n])
+    sec = _purpose_labels([n for n in rows[0]["sec"] if n])
+    return main, sec
+
+
+# One-hop neighbourhood, grouped for the detail page.
+# (target label, payload key, section title) - `related` keeps this order.
+# Labels absent from this map are handled elsewhere in the payload:
+#   Purpose -> purposes, ContributionActor -> actors,
+#   Contribution/Recommendation/Gap/Project -> parents/children.
+_RELATED_GROUPS = (
+    ("Reference",           "references",        "URL / DOI"),
+    ("Environment",         "environment",       "Environment"),
+    ("GeographicArea",      "geographicArea",    "Geographic area"),
+    ("FormalType",          "formalType",        "Formal type"),
+    ("Phenomenon",          "phenomenon",        "Phenomena"),
+    ("Output",              "output",            "Outputs"),
+    ("Topic",               "topic",             "Main topic"),
+    ("Content",             "content",           "Content"),
+    ("License",             "license",           "License"),
+    ("Accessibility",       "accessibility",     "Accessibility"),
+    ("InstitutionalLevel",  "institutionalLevel", "Institutional level"),
+    ("DataMaintainer",      "dataMaintainer",    "Data maintainer"),
+    ("Stakeholder",         "stakeholder",       "Stakeholders"),
+    ("Institution",         "institution",       "Institutions"),
+    ("User",                "user",              "Assisted by"),
+    ("DecisionMaker",       "decisionMaker",     "Decision makers"),
+    ("PolicyMaker",         "policyMaker",       "Policy makers"),
+)
+_RELATED_ORDER = {key: i for i, (_, key, _) in enumerate(_RELATED_GROUPS)}
+_RELATED_BY_LABEL = {lab: (key, title) for lab, key, title in _RELATED_GROUPS}
+
+# Best-effort display name for a neighbour: node `name` first, then the usual
+# title variants, then the person/institution identifiers.
+_RELATED_LABEL_KEYS = ("name", "title", "officialTitle", "referencePerson",
+                       "acronym", "email")
+_RELATED_URL_KEYS = ("URL", "url", "uri")
+
+_RELATED_OUT = (
+    "MATCH (n)-[r]->(m) WHERE elementId(n) = $eid "
+    "RETURN head(labels(m)) AS lab, type(r) AS rel, "
+    "       collect(DISTINCT properties(m)) AS items"
+)
+_RELATED_IN = (
+    "MATCH (m)-[r]->(n) WHERE elementId(n) = $eid "
+    "RETURN head(labels(m)) AS lab, type(r) AS rel, "
+    "       collect(DISTINCT properties(m)) AS items"
+)
+
+
+def _related_item(props):
+    """Trim a neighbour's properties to {label, url?, props?}.
+
+    Vectors and embedding status flags are dropped (they are bookkeeping,
+    like the node's own `vectorProps`).
+    """
+    clean = {}
+    for k, v in (props or {}).items():
+        if k.endswith("Embedding") or k.endswith("EmbeddingStatus"):
+            continue
+        if isinstance(v, (list, tuple)) and len(v) > 30:
+            continue
+        if v is None or (isinstance(v, str) and not v.strip()):
+            continue
+        clean[k] = v.strip() if isinstance(v, str) else v
+    if not clean:
+        return None
+
+    label_key, label = None, None
+    for k in _RELATED_LABEL_KEYS:
+        if isinstance(clean.get(k), str):
+            label_key, label = k, clean[k]
+            break
+    if label is None:
+        for k, v in clean.items():
+            if isinstance(v, str):
+                label_key, label = k, v
+                break
+    if label is None:
+        label = ", ".join(f"{k}: {v}" for k, v in list(clean.items())[:3])
+        label_key = None
+
+    item = {"label": str(label)}
+    used = {label_key} if label_key else set()
+
+    # Users are split over name/surname -> show them as one line.
+    if "surname" in clean and "name" in used and isinstance(clean["surname"], str):
+        item["label"] = f"{label} {clean['surname']}".strip()
+        used.add("surname")
+
+    for k in _RELATED_URL_KEYS:
+        if isinstance(clean.get(k), str):
+            item["url"] = clean[k]
+            used.add(k)
+            break
+    extras = {k: v for k, v in clean.items() if k not in used}
+    if extras:
+        item["props"] = extras
+    return item
+
+
+def _fetch_related(element_id):
+    """One-hop neighbours grouped by target label, in display order.
+
+    Returns an ordered dict: key -> {"label": section title, "items": [...]},
+    empty groups omitted. Both edge directions are read (Stakeholders point
+    AT a Contribution); the grouping key is the neighbour's label either way.
+    """
+    driver = get_driver()
+    grouped = {}
+    for cypher in (_RELATED_OUT, _RELATED_IN):
+        rows, _, _ = driver.execute_query(
+            cypher, eid=element_id, database_=NEO4J_GRAPH,
+            routing_=RoutingControl.READ)
+        for row in rows:
+            key_label = _RELATED_BY_LABEL.get(row["lab"])
+            if key_label is None:
+                continue
+            key, title = key_label
+            bucket = grouped.setdefault(key, {"label": title, "items": []})
+            for props in row["items"] or []:
+                item = _related_item(props)
+                if item is not None and item not in bucket["items"]:
+                    bucket["items"].append(item)
+
+    ordered = {}
+    for key in sorted(grouped, key=lambda k: _RELATED_ORDER[k]):
+        bucket = grouped[key]
+        bucket["items"].sort(key=lambda it: it["label"].lower())
+        if bucket["items"]:
+            ordered[key] = bucket
+    return ordered
+
+
+def _unique_actors(rows):
+    """Drop duplicated ContributionActor rows.
+
+    The source data stores the same person/institution as several distinct
+    nodes (one project has 15 rows all named "Luca Zaggia"), so the detail
+    page must collapse them by (name, type). The search payload already
+    dedupes names on its side.
+    """
+    seen, out = set(), []
+    for actor in rows:
+        key = (actor.get("name"), actor.get("type"))
+        if key in seen:
+            continue
+        seen.add(key)
+        out.append(actor)
+    return out
+
+
 def get_node_detail(element_id):
     """Full details of a single node + its OI <-> Rec/Gap neighbourhood.
 
@@ -499,13 +711,22 @@ def get_node_detail(element_id):
     props = dict(rows[0]["props"] or {})
     labels = sorted(rows[0]["labels"] or [])
 
+    main_purposes, sec_purposes = _fetch_purpose_split(element_id)
+    combined_purposes = list(main_purposes) + [p for p in sec_purposes
+                                               if p not in main_purposes]
+
     entry = {
         "eid": element_id,
         "labels": labels,
         "type": _record_type(labels),
         "properties": {},
         "vectorProps": {},
-        "purposes": _fetch_purposes([element_id]).get(element_id, []),
+        "purposes": combined_purposes,
+        "mainPurposes": main_purposes,
+        "secPurposes": sec_purposes,
+        # Relationship-linked fields (URL/DOI, Environment, GeographicArea,
+        # FormalType, Output, Phenomenon, ...) grouped and display-ordered.
+        "related": _fetch_related(element_id),
         "actors": [],
         "parents": [],
         "children": [],
@@ -523,7 +744,8 @@ def get_node_detail(element_id):
             "MATCH (ca:ContributionActor)-[:contributed_to]->(n) "
             "WHERE elementId(n) = $eid RETURN ca.name AS name, ca.type AS atype",
             eid=element_id, database_=NEO4J_GRAPH, routing_=RoutingControl.READ)
-        entry["actors"] = [{"name": r["name"], "type": r["atype"]} for r in arows]
+        entry["actors"] = _unique_actors(
+            [{"name": r["name"], "type": r["atype"]} for r in arows])
 
         crows, _, _ = driver.execute_query(
             "MATCH (n)-[r:recommends|highlights_gap]->(child) "
@@ -545,7 +767,8 @@ def get_node_detail(element_id):
             "MATCH (ca:ContributionActor)-[:project_contributor]->(n) "
             "WHERE elementId(n) = $eid RETURN ca.name AS name, ca.type AS atype",
             eid=element_id, database_=NEO4J_GRAPH, routing_=RoutingControl.READ)
-        entry["actors"] = [{"name": r["name"], "type": r["atype"]} for r in arows]
+        entry["actors"] = _unique_actors(
+            [{"name": r["name"], "type": r["atype"]} for r in arows])
     else:
         prows, _, _ = driver.execute_query(
             "MATCH (parent:Contribution)-[r:recommends|highlights_gap]->(n) "
