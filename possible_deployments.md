@@ -19,7 +19,7 @@ The concerns, mapped:
 |---|---|---|
 | Run on startup | `systemd` unit, `enable` | `restart: unless-stopped` + compose `restart` policies |
 | Restart after crash | `Restart=on-failure` | Docker restart policy |
-| HTTPS | Caddy / nginx+certbot in front ([About HTTPS](https://fastapi.tiangolo.com/deployment/https/)) | same proxy, or Traefik alongside containers |
+| HTTPS | Caddy / **Apache** / nginx+certbot in front ([About HTTPS](https://fastapi.tiangolo.com/deployment/https/)) | same proxy, or Traefik alongside containers |
 | Workers / memory | `uvicorn --workers N` ([Server Workers](https://fastapi.tiangolo.com/server-workers/)) | one container process; scale with replicas |
 | Run before start | `ExecStartPre=` or wrapper script | init/entrypoint step |
 
@@ -36,11 +36,16 @@ The concerns, mapped:
   `static/index.html` targets `hostname:28000`), static frontend `28080`.
   The README's 8000/8080 are stale — `stop_servers.sh` still cleans up both
   pairs.
-- **Frontend:** today `run_frontend.sh` uses `python3 -m http.server`, a dev
-  server. For a real deployment, serve `static/` from the reverse proxy
-  (Caddy/nginx) or mount it with FastAPI's
-  [StaticFiles](https://fastapi.tiangolo.com/tutorial/static-files/) and drop
-  the second process.
+- **Frontend:** it is fully static (two HTML files, no build step), so it needs
+  no service of its own. Today `run_frontend.sh` uses `python3 -m http.server`,
+  a dev server; in production serve `static/` from the reverse proxy or mount
+  it with FastAPI's
+  [StaticFiles](https://fastapi.tiangolo.com/tutorial/static-files/).
+- **API base URL:** `static/index.html` and `static/node.html` pick it
+  automatically — served from ports `28080`/`8080` (the dev static server)
+  they call `hostname:28000` directly; from any other origin they use
+  **same-origin**, i.e. the reverse proxy must forward `/search`, `/node` and
+  `/health` to the backend (see Option A′).
 - **Bind:** keep the API on `127.0.0.1` and expose it only through the proxy,
   instead of `uvicorn --host 0.0.0.0` as in the README.
 - **CORS:** `allow_origins=["*"]` in `app.py` is marked dev-only. It becomes
@@ -91,7 +96,8 @@ curl -s localhost:28000/health # quick check
 ```
 
 Reverse proxy (choose one of the tools listed under
-[HTTPS](https://fastapi.tiangolo.com/deployment/https/)):
+[HTTPS](https://fastapi.tiangolo.com/deployment/https/) — see Option A′ if the
+server already runs Apache):
 
 - **Caddy** (simplest: automatic HTTPS):
 
@@ -109,6 +115,58 @@ Reverse proxy (choose one of the tools listed under
 Neo4j systemd install (same patterns as `db_tool.sh`), low overhead.
 **Cons:** machine-specific setup, not portable to another host without
 repeating it.
+
+## Option A′ — Apache + systemd (this server's setup)
+
+Same backend as Option A, but the **already-installed Apache** plays the proxy
+role — no Caddy/nginx to add. Apache does both jobs:
+
+- serves the static frontend (`DocumentRoot` → `static/`, **no extra service**),
+- reverse-proxies `/search`, `/node`, `/health` to the private uvicorn on
+  `127.0.0.1:28000`, so the backend is never exposed publicly and the browser
+  stays same-origin (which also makes the dev-only `allow_origins=["*"]`
+  CORS in `app.py` unnecessary in production).
+
+The backend runs as the `kgq.service` unit from Option A. The frontend JS
+already handles the split: on ports `28080`/`8080` (local dev) it calls
+`:28000` directly, everywhere else it uses same-origin.
+
+Enable the proxy/SSL modules and the vhost:
+
+```bash
+sudo a2enmod proxy proxy_http ssl
+sudo systemctl reload apache2
+sudo certbot --apache -d search.example.org    # HTTPS + automatic renewal
+```
+
+```apache
+# /etc/apache2/sites-available/kgq.conf
+<VirtualHost *:443>
+    ServerName search.example.org
+
+    DocumentRoot /home/palma/code/CSRCC/KGQ-local/static
+    <Directory /home/palma/code/CSRCC/KGQ-local/static>
+        Require all granted
+    </Directory>
+
+    ProxyPreserveHost On
+    ProxyPass        /search http://127.0.0.1:28000/search
+    ProxyPassReverse /search http://127.0.0.1:28000/search
+    ProxyPass        /node   http://127.0.0.1:28000/node
+    ProxyPassReverse /node   http://127.0.0.1:28000/node
+    ProxyPass        /health http://127.0.0.1:28000/health
+    ProxyPassReverse /health http://127.0.0.1:28000/health
+    # optional: ProxyPass /docs, /redoc, /openapi.json to expose the API UI
+</VirtualHost>
+```
+
+**Pros:** uses what is already installed and supervised on the machine; one
+origin end-to-end; backend loopback-only; certbot handles HTTPS/renewal.
+**Cons:** the vhost lives outside the repo (keep it documented here); Apache
+must be able to *traverse* to the repo's `static/` dir — home directories are
+often `750`, so check with `namei -l /home/palma/code/CSRCC/KGQ-local/static`
+and `chmod o+x` the path components if `www-data` cannot read it (same
+trouble `db_tool.sh` diagnoses for Neo4j).
 
 ## Option B — Docker (+ compose)
 
@@ -156,8 +214,8 @@ assumptions (like `db_tool.sh`) don't transfer into the container.
 
 ## Decision helpers
 
-- Deployment target is **your own Linux VM, Neo4j already native** →
-  **Option A** is the least friction.
+- Deployment target is **your own Linux VM with Apache already running** →
+  **Option A + A′** (least friction, no new components).
 - Want the same artifact on several machines, or the target environment is
   container-first → **Option B**.
 - Either way: proxy in front for HTTPS, `--workers 1`, `Enable`/`restart`

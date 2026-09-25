@@ -233,10 +233,13 @@
   </div>
 
   <script>
-    // API host derives from how the page was opened (localhost:28080 locally,
-    // http:<LAN ip>:28080 for visitors on the same network). Port stays 28000
-    // and must be reachable from wherever the page is accessed.
-    const API_BASE = location.protocol + '//' + location.hostname + ':28000';
+    // API base (index.html and node.html share this rule):
+    //  - served by the dev static server (28080/8080) → talk to uvicorn directly on :28000
+    //  - served by the production web server (Apache, 80/443 or any other port)
+    //    → same-origin, i.e. the reverse proxy forwards /search, /node, /health
+    const API_BASE = (location.port === '28080' || location.port === '8080')
+      ? location.protocol + '//' + location.hostname + ':28000'
+      : '';
 
     const form       = document.getElementById('search-form');
     const qInput     = document.getElementById('q');
@@ -267,6 +270,11 @@
 
     let allResults = [];
     let lastQuery  = '';
+    // Timings of the last successful API response (kept so re-renders caused
+    // by the client-side filters keep showing them instead of 0.000).
+    let lastTimings = {};
+    let selectedActors = new Set();
+    let actorNames = [];
 
     form.addEventListener('submit', (e) => { e.preventDefault(); search(); });
 
@@ -308,7 +316,7 @@
         // satisfy every facet that has a query or a selection.
         actorFacets.every(f => f.passes(r))
       );
-      render(visible, { all: allResults });
+      render(visible, { all: allResults, ...lastTimings });
     }
 
     // Both constraints apply when set: a live-typed query (substring) and the
@@ -461,8 +469,12 @@
         const data = await res.json();
         lastQuery  = query;
         allResults = data.results || [];
-        seedActorLists(allResults);
-        render(allResults, { all: allResults });
+        lastTimings = {
+          embedding_time_s: data.embedding_time_s,
+          search_time_s:    data.search_time_s,
+        };
+        seedActorList(allResults);
+        render(allResults, { all: allResults, ...lastTimings });
       } catch (err) {
         metaEl.textContent = '';
         resultsEl.innerHTML = '<div class="error">Search failed: ' + escapeHtml(String(err.message || err)) + '</div>';

@@ -3,8 +3,12 @@
 # export_embeddings.py / import_embeddings.py can verify it without loading
 # sentence-transformers. Only the model OBJECT is created here.
 from sentence_transformers import SentenceTransformer
-
+from dotenv import load_dotenv
+import os 
 from embedding_text import EMBEDDING_MODEL_NAME, EMBEDDING_DIMS
+
+load_dotenv()
+HF_TOKEN = os.getenv("HF_TOKEN")
 
 embedding_model = SentenceTransformer(EMBEDDING_MODEL_NAME)
 embedding_dims = EMBEDDING_DIMS
