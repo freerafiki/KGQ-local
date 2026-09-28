@@ -13,7 +13,23 @@
       --oi: #1a73e8;
       --rec: #188038;
       --gap: #e37400;
-      --prj: #a142f4;
+      --prj: #e91e63;
+      /* FormalType badge colors (match index.html) */
+      --paper: #c5221f;
+      --model: #00897b;
+      --plan: #1967d2;
+      --norm: #8430ce;
+      --dataset: #b06000;
+      /* Purpose tier: PASTEL chip backgrounds (dark text) — the muted
+         counterpart of index.html's purpose dots; badges keep the
+         saturated tier. */
+      --pv-val-bg: #e8f0fe;
+      --pv-mon-bg: #e6f4ea;
+      --pv-ric-bg: #feefc3;
+      --pv-pre-bg: #f3e8fd;
+      --pv-sup-bg: #e0f7fa;
+      --pv-gov-bg: #eceff1;
+      --pv-gap-bg: #fff3e0;
       --bg: #fff;
     }
     * { box-sizing: border-box; }
@@ -43,7 +59,20 @@
     .badge.rec { background: var(--rec); }
     .badge.gap { background: var(--gap); }
     .badge.prj { background: var(--prj); }
+    .badge.paper { background: var(--paper); }
+    .badge.model { background: var(--model); }
+    .badge.plan { background: var(--plan); }
+    .badge.norm { background: var(--norm); }
+    .badge.dataset { background: var(--dataset); }
     .badge.ft { background: var(--muted); }
+    /* Badge icon: <use> into the inline Lucide sprite at the top of <body>;
+       stroke styling is inherited through the <use> shadow tree. Works for
+       both the header badge (white on color) and link badges (colored text). */
+    .bic {
+      width: 11px; height: 11px; vertical-align: -1px; margin-right: 4px;
+      fill: none; stroke: currentColor; stroke-width: 2.2;
+      stroke-linecap: round; stroke-linejoin: round;
+    }
     .name { font-size: 20px; font-weight: 600; color: var(--accent); line-height: 1.35; }
     .section {
       border: 1px solid var(--card-border); border-radius: 10px;
@@ -64,6 +93,16 @@
       display: inline-block; background: #e8f0fe; color: #174ea6;
       font-size: 12px; padding: 3px 10px; border-radius: 12px;
     }
+    /* Purpose chips: pastel bg + neutral dark text (muted tier) */
+    .tag.pv-val { background: var(--pv-val-bg); }
+    .tag.pv-mon { background: var(--pv-mon-bg); }
+    .tag.pv-ric { background: var(--pv-ric-bg); }
+    .tag.pv-pre { background: var(--pv-pre-bg); }
+    .tag.pv-sup { background: var(--pv-sup-bg); }
+    .tag.pv-gov { background: var(--pv-gov-bg); }
+    .tag.pv-gap { background: var(--pv-gap-bg); }
+    .tag.pv-val, .tag.pv-mon, .tag.pv-ric, .tag.pv-pre,
+    .tag.pv-sup, .tag.pv-gov, .tag.pv-gap { color: #3c4043; }
     .empty { color: var(--muted); font-size: 13px; }
     .actor-list, .link-list { list-style: none; margin: 0; padding: 0; }
     .actor-list li { font-size: 14px; padding: 4px 0; }
@@ -74,6 +113,8 @@
     .link-item:hover { background: #f8f9fa; border-color: var(--accent); }
     .link-item .l-badge { font-size: 11px; font-weight: 700; margin-right: 8px; }
     .l-badge.oi { color: var(--oi); } .l-badge.rec { color: var(--rec); } .l-badge.gap { color: var(--gap); } .l-badge.prj { color: var(--prj); }
+    .l-badge.paper { color: var(--paper); } .l-badge.model { color: var(--model); } .l-badge.plan { color: var(--plan); }
+    .l-badge.norm { color: var(--norm); } .l-badge.dataset { color: var(--dataset); }
     .link-item .l-title { font-weight: 600; color: var(--accent); }
     .link-item .l-snippet { color: var(--muted); font-size: 13px; margin-top: 4px; overflow-wrap: anywhere; }
     .link-item .l-rel { font-size: 12px; color: var(--muted); margin-top: 4px; }
@@ -98,6 +139,19 @@
   </style>
 </head>
 <body>
+  <!-- Inline icon sprite: Icons: lucide-static v0.544.0 (ISC License) -->
+  <svg xmlns="http://www.w3.org/2000/svg" style="display:none" aria-hidden="true">
+    <symbol id="ic-paper" viewBox="0 0 24 24"><path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z" /> <path d="M14 2v4a2 2 0 0 0 2 2h4" /> <path d="M10 9H8" /> <path d="M16 13H8" /> <path d="M16 17H8" /></symbol>
+    <symbol id="ic-model" viewBox="0 0 24 24"><path d="M21 8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16Z" /> <path d="m3.3 7 8.7 5 8.7-5" /> <path d="M12 22V12" /></symbol>
+    <symbol id="ic-plan" viewBox="0 0 24 24"><path d="M14.106 5.553a2 2 0 0 0 1.788 0l3.659-1.83A1 1 0 0 1 21 4.619v12.764a1 1 0 0 1-.553.894l-4.553 2.277a2 2 0 0 1-1.788 0l-4.212-2.106a2 2 0 0 0-1.788 0l-3.659 1.83A1 1 0 0 1 3 19.381V6.618a1 1 0 0 1 .553-.894l4.553-2.277a2 2 0 0 1 1.788 0z" /> <path d="M15 5.764v15" /> <path d="M9 3.236v15" /></symbol>
+    <symbol id="ic-norm" viewBox="0 0 24 24"><path d="m14 13-8.381 8.38a1 1 0 0 1-3.001-3l8.384-8.381" /> <path d="m16 16 6-6" /> <path d="m21.5 10.5-8-8" /> <path d="m8 8 6-6" /> <path d="m8.5 7.5 8 8" /></symbol>
+    <symbol id="ic-dataset" viewBox="0 0 24 24"><ellipse cx="12" cy="5" rx="9" ry="3" /> <path d="M3 5V19A9 3 0 0 0 21 19V5" /> <path d="M3 12A9 3 0 0 0 21 12" /></symbol>
+    <symbol id="ic-rec" viewBox="0 0 24 24"><path d="M15 14c.2-1 .7-1.7 1.5-2.5 1-.9 1.5-2.2 1.5-3.5A6 6 0 0 0 6 8c0 1 .2 2.2 1.5 3.5.7.7 1.3 1.5 1.5 2.5" /> <path d="M9 18h6" /> <path d="M10 22h4" /></symbol>
+    <symbol id="ic-gap" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10" /> <path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3" /> <path d="M12 17h.01" /></symbol>
+    <symbol id="ic-prj" viewBox="0 0 24 24"><path d="M16 20V4a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16" /> <rect width="20" height="14" x="2" y="6" rx="2" /></symbol>
+    <symbol id="ic-oi" viewBox="0 0 24 24"><path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z" /> <path d="M14 2v4a2 2 0 0 0 2 2h4" /></symbol>
+    <symbol id="ic-ft" viewBox="0 0 24 24"><path d="m21 21-4.34-4.34" /> <circle cx="11" cy="11" r="8" /></symbol>
+  </svg>
   <div class="container">
     <div class="topbar">
       <button class="back" id="back-btn">&larr; Back</button>
@@ -113,7 +167,37 @@
       ? location.protocol + '//' + location.hostname + ':28000'
       : '';
     const BADGE_CLASS = { 'Oggetto Informativo': 'oi', 'Raccomandazione': 'rec', 'Lacuna': 'gap', 'Progetto': 'prj', 'Full-text': 'ft' };
-    const BADGE_SHORT = { 'Oggetto Informativo': 'OI', 'Raccomandazione': 'Rec', 'Lacuna': 'Gap', 'Progetto': 'Prj', 'Full-text': 'FT' };
+    // Purpose taxonomy label -> pastel chip class (colors defined in :root;
+    // labels come from query_util.PURPOSE_CATEGORIES).
+    const PURPOSE_CLASS = {
+      'Valutazione':        'pv-val',
+      'Monitoraggio':       'pv-mon',
+      'Ricostruzione':      'pv-ric',
+      'Previsione':         'pv-pre',
+      'Supporto decisioni': 'pv-sup',
+      'Governance':         'pv-gov',
+      'Gap di conoscenza':  'pv-gap',
+    };
+    const BADGE_SHORT = { 'Oggetto Informativo': 'OI', 'Raccomandazione': 'Rec', 'Lacuna': 'Gap', 'Progetto': 'Project', 'Full-text': 'FT' };
+    // FormalType raw text ("Documento / report --> rapporti, ...") -> short
+    // badge word. Only the part before "-->" is matched; '' means "no match"
+    // and the caller keeps the generic "OI" badge.
+    // <svg><use> into the inline sprite at the top of <body> (Lucide, ISC).
+    // cls = badge CSS class (paper/model/plan/norm/dataset/rec/gap/prj/oi/ft).
+    function badgeIcon(cls) {
+      return '<svg class="bic" aria-hidden="true"><use href="#ic-' + cls + '"></use></svg>';
+    }
+
+    function formalBadge(ft) {
+      if (!ft) return '';
+      const head = String(ft).split('-->')[0].toLowerCase();
+      if (head.includes('docum'))                             return 'Paper';
+      if (head.includes('modell'))                            return 'Model';
+      if (head.includes('piano') || head.includes('program')) return 'Plan';
+      if (head.includes('normativ') || head.includes('atto')) return 'Norm';
+      if (head.includes('dataset') || head.includes('dati'))  return 'Dataset';
+      return '';
+    }
 
     const PROP_LABELS = {
       officialTitle: 'Official Title',
@@ -206,8 +290,12 @@
     function link(brief) {
       const label = brief.purposes && brief.purposes.length ? brief.purposes.join(', ') : '';
       const snippet = brief.title || brief.content || brief.description || 'No text';
+      const briefWord = brief.type === 'Oggetto Informativo' ? formalBadge(brief.formalType) : '';
+      const briefBadge = briefWord || (BADGE_SHORT[brief.type] || 'FT');
+      const briefClass = briefWord ? briefWord.toLowerCase()
+                                   : (BADGE_CLASS[brief.type] || 'ft');
       return '<a class="link-item" href="node.html?eid=' + encodeURIComponent(brief.eid) + '">' +
-        '<span class="l-badge ' + (BADGE_CLASS[brief.type] || 'ft') + '">' + esc(BADGE_SHORT[brief.type] || 'FT') + '</span>' +
+        '<span class="l-badge ' + briefClass + '">' + badgeIcon(briefClass) + esc(briefBadge) + '</span>' +
         '<span class="l-title">' + esc(brief.title || brief.content || brief.description || 'Node') + '</span>' +
         '<div class="l-snippet">' + esc(truncate(snippet, 180)) + '</div>' +
         (brief.rel ? '<div class="l-rel">Linked via ' + esc(brief.rel) + '</div>' : '') +
@@ -247,7 +335,6 @@
     const REL_LIST_LIMIT = 12;
 
     function render(d) {
-      const badgeClass = BADGE_CLASS[d.type] || 'ft';
       const props = d.properties || {};
       const related = d.related || {};
       const isOI = (d.labels || []).includes('Contribution');
@@ -255,8 +342,19 @@
       document.title = truncate(nodeName, 120) + ' \u00B7 KGQ Search';
 
       let html = '';
+      // OI header badge = its FormalType short word (Paper/Model/Plan/Norm/
+      // Dataset) with the FormalType color, falling back to the raw related
+      // section (older payloads) and to a plain blue "OI".
+      const ftRaw = d.formalType
+        || ((related.formalType && related.formalType.items
+             && related.formalType.items[0]) ? related.formalType.items[0].label : '')
+        || '';
+      const oiWord = d.type === 'Oggetto Informativo' ? formalBadge(ftRaw) : '';
+      const badgeClass = oiWord ? oiWord.toLowerCase()
+                                : (BADGE_CLASS[d.type] || 'ft');
+      const headerBadge = oiWord || (BADGE_SHORT[d.type] || 'FT');
       html += '<div class="header">' +
-        '<span class="badge ' + badgeClass + '">' + esc(BADGE_SHORT[d.type] || 'FT') + '</span>' +
+        '<span class="badge ' + badgeClass + '">' + badgeIcon(badgeClass) + esc(headerBadge) + '</span>' +
         '<span class="name">' + esc(nodeName) + '</span>' +
         '</div>';
 
@@ -344,7 +442,7 @@
 
       // Parent OI (for Rec/Gap)
       if (d.parents && d.parents.length) {
-        html += '<div class="section"><h2>Parent OI</h2>' + d.parents.map(link).join('') + '</div>';
+        html += '<div class="section"><h2>Source Document</h2>' + d.parents.map(link).join('') + '</div>';
       }
 
       // Connected Recs/Gaps (for OI)
@@ -402,7 +500,7 @@
 
     function tagList(items) {
       return '<div class="tags">' +
-        items.map(p => '<span class="tag">' + esc(p) + '</span>').join('') + '</div>';
+        items.map(p => '<span class="tag ' + (PURPOSE_CLASS[p] || '') + '">' + esc(p) + '</span>').join('') + '</div>';
     }
 
     // The row label already says people/institutions, so no type suffix here.

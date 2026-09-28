@@ -171,6 +171,7 @@ RETURN
     parentMainPurposeNames AS parentMainPurposeNames,
     parentSecPurposeNames AS parentSecPurposeNames,
     actorEntries AS actorEntries,
+    head([(n)-[:has_formal_type]->(ft:FormalType) | properties(ft)]) AS formalTypeProps,
     row.wrrf AS wrrf
 ORDER BY row.wrrf DESC, n.id ASC;
 """
@@ -287,6 +288,16 @@ def _record_type(labels):
     return "Full-text"
 
 
+# FormalType nodes store their long description ("Documento / report -->
+# rapporti, ...") under `name` in some dumps and `C1` in others, so the raw
+# properties map is read and whichever key is present is used. None when the
+# node has no FormalType. The frontend maps the text to a short badge word
+# (Doc / Model / Plan / Norm / Data).
+def _formal_type_text(props):
+    props = props or {}
+    return props.get("name") or props.get("C1")
+
+
 # A4 "main purpose" taxonomy. A Purpose node's name is a comma-joined phrase
 # (e.g. "Valutazione, i.e. impatti, rischi, ..."), so we match each known
 # keyword and keep the first occurrence per category, in taxonomy order.
@@ -381,6 +392,9 @@ def _serialize(record):
             "abstract": record['abstract'],
             "findings": record['findings'],
             "submission_id": record['id'],
+            # Raw FormalType text; drives the short Doc/Model/Plan/Norm/Data
+            # badge on the result card (falls back to "OI" when absent).
+            "formalType": _formal_type_text(record['formalTypeProps']),
         })
     elif entry["type"] == "Raccomandazione":
         entry.update({"content": record['content'], "motivation": record['motivation']})
@@ -739,6 +753,12 @@ def get_node_detail(element_id):
         else:
             entry["properties"][k] = v
 
+    # Same FormalType string the "Formal type" section shows, lifted to the
+    # top level so the header badge can map it to Doc/Model/Plan/Norm/Data.
+    ft_bucket = entry["related"].get("formalType")
+    entry["formalType"] = ft_bucket["items"][0]["label"] if (
+        ft_bucket and ft_bucket["items"]) else None
+
     if "Contribution" in labels:
         arows, _, _ = driver.execute_query(
             "MATCH (ca:ContributionActor)-[:contributed_to]->(n) "
@@ -774,13 +794,16 @@ def get_node_detail(element_id):
             "MATCH (parent:Contribution)-[r:recommends|highlights_gap]->(n) "
             "WHERE elementId(n) = $eid "
             "RETURN type(r) AS rel, elementId(parent) AS peid, "
-            "labels(parent) AS plabels, properties(parent) AS pprops",
+            "labels(parent) AS plabels, properties(parent) AS pprops, "
+            "head([(parent)-[:has_formal_type]->(ft:FormalType) | properties(ft)]) AS ftprops",
             eid=element_id, database_=NEO4J_GRAPH, routing_=RoutingControl.READ)
         eids = [r["peid"] for r in prows]
         purposes = _fetch_purposes(eids)
         entry["parents"] = [
             {**_make_brief(r["peid"], r["pprops"], r["plabels"], r["rel"]),
-             "purposes": purposes.get(r["peid"], [])}
+             "purposes": purposes.get(r["peid"], []),
+             # Parent OIs carry their FormalType too -> link-item badge.
+             "formalType": _formal_type_text(r["ftprops"])}
             for r in prows
         ]
 

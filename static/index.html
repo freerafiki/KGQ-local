@@ -15,7 +15,22 @@
       --oi: #1a73e8;
       --rec: #188038;
       --gap: #e37400;
-      --prj: #a142f4;
+      --prj: #e91e63;
+      /* FormalType badge colors (Doc Type filter entries) */
+      --paper: #c5221f;
+      --model: #00897b;
+      --plan: #1967d2;
+      --norm: #8430ce;
+      --dataset: #b06000;
+      /* Purpose tier: deliberately MUTED mid-tones (badges keep the
+         saturated tier) — hue kinship with the related type where natural. */
+      --pv-val: #4285f4;   /* Valutazione      - blue    */
+      --pv-mon: #34a853;   /* Monitoraggio     - green   */
+      --pv-ric: #f9ab00;   /* Ricostruzione    - amber   */
+      --pv-pre: #a142f4;   /* Previsione       - violet  */
+      --pv-sup: #12b5cb;   /* Supporto         - cyan    */
+      --pv-gov: #78909c;   /* Governance       - slate   */
+      --pv-gap: #fa7b17;   /* Gap conoscenza   - orange  */
     }
     * { box-sizing: border-box; }
     html, body { height: 100%; }
@@ -90,11 +105,26 @@
       padding: 7px 0; color: #202124;
     }
     .chk input { width: 16px; height: 16px; accent-color: var(--accent); cursor: pointer; }
+    /* Two-line filter label: category + smaller description line */
+    .chk-text { display: flex; flex-direction: column; line-height: 1.3; }
+    .chk-desc { font-size: 11.5px; font-weight: 400; color: var(--muted); }
     .dot { width: 12px; height: 12px; border-radius: 50%; flex-shrink: 0; display: inline-block; }
     .dot.oi { background: var(--oi); }
     .dot.rec { background: var(--rec); }
     .dot.gap { background: var(--gap); }
     .dot.prj { background: var(--prj); }
+    .dot.paper { background: var(--paper); }
+    .dot.model { background: var(--model); }
+    .dot.plan { background: var(--plan); }
+    .dot.norm { background: var(--norm); }
+    .dot.dataset { background: var(--dataset); }
+    .dot.pv-val { background: var(--pv-val); }
+    .dot.pv-mon { background: var(--pv-mon); }
+    .dot.pv-ric { background: var(--pv-ric); }
+    .dot.pv-pre { background: var(--pv-pre); }
+    .dot.pv-sup { background: var(--pv-sup); }
+    .dot.pv-gov { background: var(--pv-gov); }
+    .dot.pv-gap { background: var(--pv-gap); }
     .meta { color: var(--muted); font-size: 13px; margin: 0 0 10px; }
     .results { margin-top: 4px; }
     .card {
@@ -103,10 +133,14 @@
     }
     .card:hover { border-color: var(--accent); box-shadow: 0 1px 5px rgba(32,33,36,.12); }
     .card:active { border-color: var(--accent-dark); }
-    .card-head { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; }
-    .name { font-size: 17px; font-weight: 600; color: var(--accent); }
+    .card-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 10px; }
+    .name { font-size: 17px; font-weight: 600; color: var(--accent); flex: 1; min-width: 0; }
     .badge {
-      flex-shrink: 0; display: inline-block; min-width: 56px; text-align: center;
+      box-sizing: border-box; flex-shrink: 0; display: inline-block;
+      /* Fixed width so every card's badge aligns in one vertical column,
+         whatever the label (DATASET/PROJECT are the longest + icon). */
+      width: 94px; white-space: nowrap;
+      text-align: center;
       font-size: 11px; font-weight: 700; letter-spacing: .4px; text-transform: uppercase;
       color: #fff; border-radius: 12px; padding: 3px 10px;
     }
@@ -114,7 +148,20 @@
     .badge.rec { background: var(--rec); }
     .badge.gap { background: var(--gap); }
     .badge.prj { background: var(--prj); }
+    .badge.paper { background: var(--paper); }
+    .badge.model { background: var(--model); }
+    .badge.plan { background: var(--plan); }
+    .badge.norm { background: var(--norm); }
+    .badge.dataset { background: var(--dataset); }
     .badge.ft { background: var(--muted); }
+    /* Badge icon: <use> into the inline Lucide sprite at the top of <body>.
+       Inherited properties pass through the <use> shadow tree, so the stroke
+       styling lives here rather than in each <symbol>. */
+    .bic {
+      width: 11px; height: 11px; vertical-align: -1px; margin-right: 4px;
+      fill: none; stroke: currentColor; stroke-width: 2.2;
+      stroke-linecap: round; stroke-linejoin: round;
+    }
     .preview {
       color: #3c4043; font-size: 14px; line-height: 1.5; margin: 0 0 10px;
       display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden;
@@ -132,21 +179,27 @@
     .toggle:hover { text-decoration: underline; }
     .scores { font-size: 13px; color: var(--muted); background: #f8f9fa; border-radius: 6px; padding: 6px 10px; overflow-wrap: anywhere; }
     .scores b { color: #202124; }
-    .purpose-row { font-size: 13px; color: var(--muted); margin-top: 8px; }
-    .purpose-row .plabel { color: #202124; font-weight: 700; }
-    .contributors-row { font-size: 13px; color: var(--muted); margin-top: 8px; }
-    .contributors-row .plabel { color: #202124; font-weight: 700; }
     .parent-row { font-size: 13px; color: var(--muted); margin-top: 8px; }
     .parent-row .plabel { color: #202124; font-weight: 700; }
-    .purpose-row .tag { display: inline-block; margin-right: 6px; }
-    .purpose-row .tag::before { content: ""; display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 4px; background: var(--accent); vertical-align: baseline; }
     .empty, .error, .loading { color: var(--muted); text-align: center; padding: 24px 0; }
     .error { color: #d93025; }
-    .id { font-size: 12px; color: #9aa0a6; margin-top: 6px; }
     footer { margin: 40px 0 20px; font-size: 12px; color: #9aa0a6; }
   </style>
 </head>
 <body>
+  <!-- Inline icon sprite: Icons: lucide-static v0.544.0 (ISC License) -->
+  <svg xmlns="http://www.w3.org/2000/svg" style="display:none" aria-hidden="true">
+    <symbol id="ic-paper" viewBox="0 0 24 24"><path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z" /> <path d="M14 2v4a2 2 0 0 0 2 2h4" /> <path d="M10 9H8" /> <path d="M16 13H8" /> <path d="M16 17H8" /></symbol>
+    <symbol id="ic-model" viewBox="0 0 24 24"><path d="M21 8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16Z" /> <path d="m3.3 7 8.7 5 8.7-5" /> <path d="M12 22V12" /></symbol>
+    <symbol id="ic-plan" viewBox="0 0 24 24"><path d="M14.106 5.553a2 2 0 0 0 1.788 0l3.659-1.83A1 1 0 0 1 21 4.619v12.764a1 1 0 0 1-.553.894l-4.553 2.277a2 2 0 0 1-1.788 0l-4.212-2.106a2 2 0 0 0-1.788 0l-3.659 1.83A1 1 0 0 1 3 19.381V6.618a1 1 0 0 1 .553-.894l4.553-2.277a2 2 0 0 1 1.788 0z" /> <path d="M15 5.764v15" /> <path d="M9 3.236v15" /></symbol>
+    <symbol id="ic-norm" viewBox="0 0 24 24"><path d="m14 13-8.381 8.38a1 1 0 0 1-3.001-3l8.384-8.381" /> <path d="m16 16 6-6" /> <path d="m21.5 10.5-8-8" /> <path d="m8 8 6-6" /> <path d="m8.5 7.5 8 8" /></symbol>
+    <symbol id="ic-dataset" viewBox="0 0 24 24"><ellipse cx="12" cy="5" rx="9" ry="3" /> <path d="M3 5V19A9 3 0 0 0 21 19V5" /> <path d="M3 12A9 3 0 0 0 21 12" /></symbol>
+    <symbol id="ic-rec" viewBox="0 0 24 24"><path d="M15 14c.2-1 .7-1.7 1.5-2.5 1-.9 1.5-2.2 1.5-3.5A6 6 0 0 0 6 8c0 1 .2 2.2 1.5 3.5.7.7 1.3 1.5 1.5 2.5" /> <path d="M9 18h6" /> <path d="M10 22h4" /></symbol>
+    <symbol id="ic-gap" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10" /> <path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3" /> <path d="M12 17h.01" /></symbol>
+    <symbol id="ic-prj" viewBox="0 0 24 24"><path d="M16 20V4a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16" /> <rect width="20" height="14" x="2" y="6" rx="2" /></symbol>
+    <symbol id="ic-oi" viewBox="0 0 24 24"><path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z" /> <path d="M14 2v4a2 2 0 0 0 2 2h4" /></symbol>
+    <symbol id="ic-ft" viewBox="0 0 24 24"><path d="m21 21-4.34-4.34" /> <circle cx="11" cy="11" r="8" /></symbol>
+  </svg>
   <div class="container">
     <div class="logo"><b>VCDB</b> Search<sup class="tag">local prototype</sup></div>
 
@@ -168,23 +221,33 @@
           <details class="filter-group" id="type-group">
             <summary>Doc Type</summary>
             <div class="group-body">
-              <label class="chk"><input type="checkbox" id="f-contrib" value="Contribution" checked> <span class="dot oi"></span> Oggetto Informativo (OI)</label>
+              <!-- OI is filtered through its FormalType: these 5 entries ARE
+                   the OI type (every Contribution has exactly one), so an OI
+                   shows iff one of the ticked entries matches its badge. -->
+              <label class="chk"><input type="checkbox" class="formal" value="Paper" checked> <span class="dot paper"></span> Paper</label>
+              <label class="chk"><input type="checkbox" class="formal" value="Model" checked> <span class="dot model"></span> Model</label>
+              <label class="chk"><input type="checkbox" class="formal" value="Plan" checked> <span class="dot plan"></span> Plan</label>
+              <label class="chk"><input type="checkbox" class="formal" value="Norm" checked> <span class="dot norm"></span> Norm</label>
+              <label class="chk"><input type="checkbox" class="formal" value="Dataset" checked> <span class="dot dataset"></span> Dataset</label>
               <label class="chk"><input type="checkbox" id="f-rec" value="Recommendation" checked> <span class="dot rec"></span> Raccomandazioni (Rec)</label>
               <label class="chk"><input type="checkbox" id="f-gap" value="Gap" checked> <span class="dot gap"></span> Lacune (Gap)</label>
-              <label class="chk"><input type="checkbox" id="f-prj" value="Project" checked> <span class="dot prj"></span> Progetti (Prj)</label>
+              <label class="chk"><input type="checkbox" id="f-prj" value="Project" checked> <span class="dot prj"></span> Progetti (Project)</label>
             </div>
           </details>
 
           <details class="filter-group" id="purpose-group">
             <summary>Main Purpose</summary>
             <div class="group-body">
-              <label class="chk"><input type="checkbox" value="Valutazione" checked> Valutazione</label>
-              <label class="chk"><input type="checkbox" value="Monitoraggio" checked> Monitoraggio</label>
-              <label class="chk"><input type="checkbox" value="Ricostruzione" checked> Ricostruzione</label>
-              <label class="chk"><input type="checkbox" value="Previsione" checked> Previsione</label>
-              <label class="chk"><input type="checkbox" value="Supporto decisioni" checked> Supporto decisioni</label>
-              <label class="chk"><input type="checkbox" value="Governance" checked> Governance</label>
-              <label class="chk"><input type="checkbox" value="Gap di conoscenza" checked> Gap di conoscenza</label>
+              <!-- Second line = Purpose.name from the graph (category prefix
+                   stripped where the name starts with it). Checkbox values
+                   MUST stay the taxonomy labels from query_util.PURPOSE_CATEGORIES. -->
+              <label class="chk"><input type="checkbox" value="Valutazione" checked> <span class="dot pv-val"></span><span class="chk-text">Valutazione<span class="chk-desc">i.e. impatti, rischi, conseguenze</span></span></label>
+              <label class="chk"><input type="checkbox" value="Monitoraggio" checked> <span class="dot pv-mon"></span><span class="chk-text">Monitoraggio<span class="chk-desc">e/o descrizione dello stato attuale</span></span></label>
+              <label class="chk"><input type="checkbox" value="Ricostruzione" checked> <span class="dot pv-ric"></span><span class="chk-text">Ricostruzione<span class="chk-desc">e interpretazione del passato del sistema</span></span></label>
+              <label class="chk"><input type="checkbox" value="Previsione" checked> <span class="dot pv-pre"></span><span class="chk-text">Previsione<span class="chk-desc">o rappresentazione del futuro</span></span></label>
+              <label class="chk"><input type="checkbox" value="Supporto decisioni" checked> <span class="dot pv-sup"></span><span class="chk-text">Supporto decisioni<span class="chk-desc">Supporto diretto alle decisioni</span></span></label>
+              <label class="chk"><input type="checkbox" value="Governance" checked> <span class="dot pv-gov"></span><span class="chk-text">Governance<span class="chk-desc">Regole, processi o governance</span></span></label>
+              <label class="chk"><input type="checkbox" value="Gap di conoscenza" checked> <span class="dot pv-gap"></span><span class="chk-text">Gap di conoscenza<span class="chk-desc">Evidenzia un limite o un gap di conoscenza</span></span></label>
             </div>
           </details>
 
@@ -246,7 +309,11 @@
     const btn        = document.getElementById('search-btn');
     const metaEl     = document.getElementById('meta');
     const resultsEl  = document.getElementById('results');
-    const filterCheckboxes = document.querySelectorAll('#type-group .chk input');
+    // The Doc Type group holds two axes: the 5 FormalType entries (OI) and
+    // the plain node types (Rec/Gap/Project). They map differently, so keep
+    // two collections.
+    const filterCheckboxes = document.querySelectorAll('#type-group .chk input:not(.formal)');
+    const formalCheckboxes = document.querySelectorAll('#type-group .chk input.formal');
     const purposeCheckboxes = document.querySelectorAll('#purpose-group .chk input');
 
     const BADGE_CLASS = {
@@ -259,13 +326,35 @@
       'Oggetto Informativo': 'OI',
       'Raccomandazione':     'Rec',
       'Lacuna':              'Gap',
-      'Progetto':            'Prj',
+      'Progetto':            'Project',
     };
+    // The 5 FormalType badge words = the OI entries of the Doc Type filter.
+    const FORMAL_TYPES = ['Paper', 'Model', 'Plan', 'Norm', 'Dataset'];
+    // FormalType raw text ("Documento / report --> rapporti, ...") -> short
+    // badge word. Only the part before "-->" is matched; '' means "no match"
+    // and the caller keeps the generic "OI" badge.
+    // <svg><use> into the inline sprite at the top of <body> (Lucide, ISC).
+    // cls = badge CSS class (paper/model/plan/norm/dataset/rec/gap/prj/oi/ft).
+    function badgeIcon(cls) {
+      return '<svg class="bic" aria-hidden="true"><use href="#ic-' + cls + '"></use></svg>';
+    }
+
+    function formalBadge(ft) {
+      if (!ft) return '';
+      const head = String(ft).split('-->')[0].toLowerCase();
+      if (head.includes('docum'))                             return 'Paper';
+      if (head.includes('modell'))                            return 'Model';
+      if (head.includes('piano') || head.includes('program')) return 'Plan';
+      if (head.includes('normativ') || head.includes('atto')) return 'Norm';
+      if (head.includes('dataset') || head.includes('dati'))  return 'Dataset';
+      return '';
+    }
     const FILTER_TO_TYPE = {
-      'Contribution':    'Oggetto Informativo',
       'Recommendation':  'Raccomandazione',
       'Gap':             'Lacuna',
       'Project':         'Progetto',
+      // 'Contribution' has no entry on purpose: OIs are filtered by their
+      // FormalType (formalCheckboxes / FORMAL_TYPES), not by node type.
     };
 
     let allResults = [];
@@ -276,18 +365,64 @@
     let selectedActors = new Set();
     let actorNames = [];
 
+    // ---- Search persistence ------------------------------------------
+    // Back/Forward — or a fresh reload after the browser evicted the
+    // back-forward cache — must not lose the current search. State lives
+    // in sessionStorage: PER TAB, so other tabs/users can never collide.
+    const SEARCH_STORE_KEY = 'kgq.search.v1';
+
+    function saveSearchState() {
+      if (!lastQuery || !allResults.length) return;
+      try {
+        sessionStorage.setItem(SEARCH_STORE_KEY, JSON.stringify({
+          query: lastQuery,
+          source_k: clampInt('source_k', 10),
+          final_k: clampInt('final_k', 20),
+          rrf_constant: clampInt('rrf_constant', 60),
+          results: allResults,
+          timings: lastTimings,
+        }));
+      } catch (e) { /* quota exceeded / private mode: restore just won't happen */ }
+    }
+
+    // Re-render from the stored results with NO API call, so restoring
+    // works even while the backend is busy with someone else's search.
+    function restoreSearchState() {
+      let saved = null;
+      try { saved = JSON.parse(sessionStorage.getItem(SEARCH_STORE_KEY)); } catch (e) {}
+      if (!saved || typeof saved.query !== 'string' || !saved.query ||
+          !Array.isArray(saved.results) || !saved.results.length) return false;
+      qInput.value = saved.query;
+      if (Number.isFinite(saved.source_k)) document.getElementById('source_k').value = saved.source_k;
+      if (Number.isFinite(saved.final_k)) document.getElementById('final_k').value = saved.final_k;
+      if (Number.isFinite(saved.rrf_constant)) document.getElementById('rrf_constant').value = saved.rrf_constant;
+      lastQuery = saved.query;
+      allResults = saved.results;
+      lastTimings = saved.timings || {};
+      seedActorLists(allResults);
+      renderFiltered();   // honour the filter chain, same as a fresh search
+      return true;
+    }
+
     form.addEventListener('submit', (e) => { e.preventDefault(); search(); });
 
     // Toggling a filter re-filters the ALREADY-FETCHED results locally, no
     // round trip to the API. Unchecked = excluded; all default to checked so
     // unchecking one hides results carrying that tag.
     filterCheckboxes.forEach(cb => cb.addEventListener('change', renderFiltered));
+    formalCheckboxes.forEach(cb => cb.addEventListener('change', renderFiltered));
     purposeCheckboxes.forEach(cb => cb.addEventListener('change', renderFiltered));
 
     function activeFilterTypes() {
       return Array.from(filterCheckboxes)
         .filter(cb => cb.checked)
         .map(cb => FILTER_TO_TYPE[cb.value]);
+    }
+
+    function activeFormalTypes() {
+      return Array.from(formalCheckboxes)
+        .filter(cb => cb.checked)
+        .map(cb => cb.value);
     }
 
     function activePurposes() {
@@ -308,14 +443,26 @@
     function renderFiltered() {
       if (!lastQuery) return;
       const typeActive = activeFilterTypes();
+      const formalActive = activeFormalTypes();
       const purposeActive = activePurposes();
-      const visible = allResults.filter(r =>
-        passesAxis([r.type], typeActive) &&
-        passesAxis(r.purposes || [], purposeActive) &&
-        // People and Institutions are independent axes: a result has to
-        // satisfy every facet that has a query or a selection.
-        actorFacets.every(f => f.passes(r))
-      );
+      const visible = allResults.filter(r => {
+        // OIs are filtered by their FormalType badge (the 5 Doc Type
+        // entries); every other node type by its own entry. An OI without
+        // a recognised FormalType only survives while NOTHING is narrowed.
+        let typeOk;
+        if (r.type === 'Oggetto Informativo') {
+          const word = formalBadge(r.formalType);
+          typeOk = word ? passesAxis([word], formalActive)
+                        : formalActive.length === FORMAL_TYPES.length;
+        } else {
+          typeOk = passesAxis([r.type], typeActive);
+        }
+        return typeOk &&
+          passesAxis(r.purposes || [], purposeActive) &&
+          // People and Institutions are independent axes: a result has to
+          // satisfy every facet that has a query or a selection.
+          actorFacets.every(f => f.passes(r));
+      });
       render(visible, { all: allResults, ...lastTimings });
     }
 
@@ -474,7 +621,13 @@
           search_time_s:    data.search_time_s,
         };
         seedActorLists(allResults);
-        render(allResults, { all: allResults, ...lastTimings });
+        // Route through the SAME filter chain as the checkbox toggles: the
+        // backend always returns every type (no `filters` in the payload),
+        // so the active client-side filters must be applied here too —
+        // otherwise the tickboxes and the shown results disagree until the
+        // user happens to toggle one.
+        renderFiltered();
+        saveSearchState();
       } catch (err) {
         metaEl.textContent = '';
         resultsEl.innerHTML = '<div class="error">Search failed: ' + escapeHtml(String(err.message || err)) + '</div>';
@@ -570,16 +723,14 @@
       }
 
       resultsEl.innerHTML = results.map((r) => {
-        const badgeClass = BADGE_CLASS[r.type] || 'ft';
-        const badgeText  = BADGE_SHORT[r.type] || 'FT';
-        const purposeHtml = (r.purposes && r.purposes.length)
-          ? '<div class="purpose-row"><span class="plabel">Purpose:</span> ' +
-            r.purposes.map(p => '<span class="tag">' + escapeHtml(p) + '</span>').join('') + '</div>'
-          : '';
-        const contributorsHtml = (r.actors && r.actors.length)
-          ? '<div class="contributors-row"><span class="plabel">Contributors:</span> ' +
-            escapeHtml(truncate(r.actors.join(', '), 100)) + '</div>'
-          : '';
+        const oiWord = r.type === 'Oggetto Informativo' ? formalBadge(r.formalType) : '';
+        const badgeClass = oiWord ? oiWord.toLowerCase()
+                                  : (BADGE_CLASS[r.type] || 'ft');
+        const badgeText  = (r.type === 'Oggetto Informativo')
+          ? (oiWord || 'OI')
+          : (BADGE_SHORT[r.type] || 'FT');
+        // Purpose, contributors and db_id are deliberately NOT shown on the
+        // card (they live on the node page) so more results fit the viewport.
         const parentHtml = (r.type !== 'Oggetto Informativo') && r.parent_oi
           ? '<div class="parent-row"><span class="plabel">OI:</span> ' +
             escapeHtml(truncate(r.parent_oi.officialTitle || r.parent_oi.title, 120)) + '</div>'
@@ -587,17 +738,14 @@
         return '' +
           '<div class="card" data-eid="' + escapeHtml(r.neo4j_id) + '">' +
             '<div class="card-head">' +
-              '<span class="badge ' + badgeClass + '">' + badgeText + '</span>' +
               '<span class="name">' + escapeHtml(truncate(nameOf(r), 180)) + '</span>' +
+              '<span class="badge ' + badgeClass + '">' + badgeIcon(badgeClass) + badgeText + '</span>' +
             '</div>' +
             '<div class="preview">' + escapeHtml(previewText(r)) + '</div>' +
             '<div class="full">' + fullBody(r) + '</div>' +
             '<button type="button" class="toggle">Show more</button>' +
             '<div class="scores"><b>WRRF ' + r.wrrf_score.toFixed(4) + '</b> | ' + scoreText(r, ftMin, ftMax) + '</div>' +
-            purposeHtml +
-            contributorsHtml +
             parentHtml +
-            '<div class="id">db_id: ' + escapeHtml(r.neo4j_id) + '</div>' +
           '</div>';
       }).join('');
     }
@@ -607,6 +755,10 @@
         '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;',
       }[c]));
     }
+
+    // Bring the previous search back after Back/Forward or a page reload
+    // (bfcache eviction): renders from the stored results, no API call.
+    restoreSearchState();
   </script>
 </body>
 </html>
