@@ -473,7 +473,7 @@
           embedding_time_s: data.embedding_time_s,
           search_time_s:    data.search_time_s,
         };
-        seedActorList(allResults);
+        seedActorLists(allResults);
         render(allResults, { all: allResults, ...lastTimings });
       } catch (err) {
         metaEl.textContent = '';
