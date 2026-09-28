@@ -16,15 +16,21 @@ Future endpoints to add (see query_util.py for the strategy code):
 """
 
 from contextlib import asynccontextmanager
-from datetime import datetime
+import logging
 import time
 
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 from typing import Literal
+from prometheus_fastapi_instrumentator import Instrumentator
 
 import query_util
+
+# stdout logging; uvicorn's root handler gives every line a timestamp, so
+# under systemd everything ends up in the journal (journalctl -u kgq.service).
+# Level INFO = one line per request + one line per search (incl. timings).
+logger = logging.getLogger("kgq.api")
 
 
 class FilterModel(BaseModel):
@@ -47,7 +53,7 @@ class SearchRequest(BaseModel):
 async def lifespan(app: FastAPI):
     # query_util.get_driver() is lazy; nothing to do here besides a health check.
     for ip in query_util.get_lan_ips():
-        print(f"API on http://{ip}:28000  (LAN access)")
+        logger.info("API on http://%s:28000  (LAN access)", ip)
     yield
     query_util.close_driver()
 
@@ -65,6 +71,23 @@ app.add_middleware(
 )
 
 
+@app.middleware("http")
+async def timing_middleware(request: Request, call_next):
+    """Standard per-request timing line: method, path, status, duration."""
+    started = time.perf_counter()
+    response = await call_next(request)
+    logger.info("%s %s -> %d in %.3fs",
+                request.method, request.url.path,
+                response.status_code, time.perf_counter() - started)
+    return response
+
+
+# Prometheus metrics at GET /metrics (request counts + latency histograms
+# per route/status). Excluded from the OpenAPI schema. Do NOT proxy it
+# through Apache for the public — scrape it from localhost instead.
+Instrumentator().instrument(app).expose(app, include_in_schema=False)
+
+
 @app.get("/health")
 def health():
     return {"status": "ok"}
@@ -76,9 +99,9 @@ def search(req: SearchRequest):
     query_preview = req.query if len(req.query) <= 100 else req.query[:100] + "\u2026"
     types = req.filters.types if req.filters else None
     started = time.perf_counter()
-    print(f"[{datetime.now().isoformat(timespec='seconds')}] search IN    q={query_preview!r} "
-          f"(source_k={req.source_k}, final_k={req.final_k}, rrf={req.rrf_constant}"
-          f"{', types=' + ','.join(types) if types else ''})")
+    logger.info("search IN   q=%r (source_k=%d, final_k=%d, rrf=%d%s)",
+                query_preview, req.source_k, req.final_k, req.rrf_constant,
+                ", types=" + ",".join(types) if types else "")
 
     result = query_util.run_search(
         req.query,
@@ -88,10 +111,9 @@ def search(req: SearchRequest):
         types=types,
     )
     total = time.perf_counter() - started
-    print(f"[{datetime.now().isoformat(timespec='seconds')}] search DONE  "
-          f"q={query_preview!r} embed={result['embedding_time_s']:.3f}s "
-          f"neo4j={result['search_time_s']:.3f}s total={total:.3f}s "
-          f"results={len(result['results'])}")
+    logger.info("search DONE q=%r embed=%.3fs neo4j=%.3fs total=%.3fs n=%d",
+                query_preview, result["embedding_time_s"],
+                result["search_time_s"], total, len(result["results"]))
     return result
 
 
@@ -101,7 +123,7 @@ def node_detail(eid: str):
     detail = query_util.get_node_detail(eid)
     if detail is None:
         raise HTTPException(status_code=404, detail=f"Node not found: {eid}")
-    print(f"[{datetime.now().isoformat(timespec='seconds')}] node IN   eid={eid}")
+    logger.info("node detail eid=%s", eid)
     return detail
 
 
