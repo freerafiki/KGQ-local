@@ -75,6 +75,7 @@
     .col-results { flex: 1 1 auto; min-width: 0; overflow-y: auto; }
     .panel-title { margin: 0 2px 4px; font-size: 16px; font-weight: 700; }
     .section-title { margin: 0 0 4px; font-size: 16px; font-weight: 700; }
+    .small-title { font-size: 12px;}
     .filter-panel {
       padding: 12px 14px 6px; border: 1px solid var(--card-border); border-radius: 10px;
     }
@@ -125,7 +126,19 @@
     .dot.pv-sup { background: var(--pv-sup); }
     .dot.pv-gov { background: var(--pv-gov); }
     .dot.pv-gap { background: var(--pv-gap); }
-    .meta { color: var(--muted); font-size: 13px; margin: 0 0 10px; }
+    /* Search summary, shown under the Filters card in the left column:
+       one fact per line. The separator belongs to the title so the whole
+       block (title + lines + footer) reads as one section. */
+    .col-filters .section-title {
+      margin-top: 14px; padding-top: 10px;
+      border-top: 1px solid var(--card-border);
+    }
+    .meta { color: var(--muted); font-size: 13px; }
+    .meta > div { margin-top: 3px; }
+    .meta .meta-q {
+      color: #202124; font-weight: 600; font-size: 13.5px;
+      overflow-wrap: anywhere; margin-top: 0;
+    }
     .results { margin-top: 4px; }
     .card {
       border: 1px solid var(--card-border); border-radius: 10px; padding: 16px; margin-bottom: 14px;
@@ -184,6 +197,8 @@
     .empty, .error, .loading { color: var(--muted); text-align: center; padding: 24px 0; }
     .error { color: #d93025; }
     footer { margin: 40px 0 20px; font-size: 12px; color: #9aa0a6; }
+    /* Footer now sits in the left column, right under the summary lines. */
+    .col-filters footer { margin: 14px 0 4px; }
   </style>
 </head>
 <body>
@@ -201,7 +216,7 @@
     <symbol id="ic-ft" viewBox="0 0 24 24"><path d="m21 21-4.34-4.34" /> <circle cx="11" cy="11" r="8" /></symbol>
   </svg>
   <div class="container">
-    <div class="logo"><b>VCDB</b> Search<sup class="tag">local prototype</sup></div>
+    <div class="logo"><b>V<span class="small-title">enice</span>C<span class="small-title">limate</span>D<span class="small-title">ata</span>B<span class="small-title">ase</span></b> Search<sup class="tag">prototype</sup></div>
 
     <form id="search-form" autocomplete="off">
       <div class="searchbar">
@@ -284,13 +299,17 @@
             </div>
           </details>
         </div>
+        <!-- Search summary below the Filters card (keeps the results
+             column full-width). #meta must stay EMPTY in the markup:
+             render() writes its innerHTML on every search, so anything
+             nested inside it (e.g. the footer) would be wiped out. -->
+        <h3 class="section-title">Results Summary</h3>
+        <div id="meta" class="meta"></div>
+        <footer>KGQ search prototype</footer>
       </aside>
 
       <section class="col-results">
-        <h3 class="section-title">Results</h3>
-        <div id="meta" class="meta"></div>
         <div id="results" class="results"></div>
-        <footer>Local KGQ search prototype</footer>
       </section>
     </div>
   </div>
@@ -712,10 +731,11 @@
       var countText = String(results.length) + ' results';
       if (total !== results.length) countText += ' (filtered from ' + total + ')';
 
-      metaEl.textContent =
-        '\u201C' + lastQuery + '\u201D \u00B7 ' + countText + ' \u00B7 ' +
-        (info.embedding_time_s ?? 0).toFixed(3) + 's embed \u00B7 ' +
-        (info.search_time_s ?? 0).toFixed(3) + 's search';
+      metaEl.innerHTML =
+        'searched:<div class="meta-q">\u201C' + escapeHtml(lastQuery) + '\u201D</div>' +
+        '<div> got ' + countText + '</div>' +
+        '<div> took ' + (info.embedding_time_s ?? 0).toFixed(3) + 's to embed the query string</div>' +
+        '<div> took ' + (info.search_time_s ?? 0).toFixed(3) + 's to search the VCDB</div>';
 
       if (!results.length) {
         resultsEl.innerHTML = '<div class="empty">No results found.</div>';
