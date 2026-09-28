@@ -15,10 +15,10 @@ embedding_dims = EMBEDDING_DIMS
 
 
 sourceWeights_default = {
-    'fulltext': 1.0,        
-    'OI_description': 1.2,  
-    'OI_title': 0.5,  
-    'OI_subtitle': 0.8,  
+    'fulltext': 0.4,        
+    'OI_description': 1.3,  
+    'OI_title': 0.9,  
+    'OI_subtitle': 0.9,  
     'recommendation': 1.0,
     'gap': 1.0,
     'project': 1.0,

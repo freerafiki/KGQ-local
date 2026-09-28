@@ -416,7 +416,7 @@ def embed_query(text: str):
     return embedding_model.encode(text)
 
 
-def run_search(query_text, source_k=10, final_k=20, rrf_constant=60,
+def run_search(query_text, source_k=20, final_k=50, rrf_constant=60,
                source_weights=None, types=None):
     """Run the hybrid search (fulltext + vectors, wRRF fusion).
 
