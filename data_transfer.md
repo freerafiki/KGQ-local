@@ -2,6 +2,9 @@
 
 Two complementary procedures, depending on what you move:
 
+> All commands assume the **repository root** as working directory (so `.env`
+> is found); the tools themselves live in `scripts/`.
+
 | | `db_tool.sh` (whole DB) | `export/import_embeddings.py` (vectors only) |
 |---|---|---|
 | Moves | graph + vectors + indexes + status flags (`.dump`) | vectors only (JSON, keyed by text hash) |
@@ -26,7 +29,7 @@ diagnosis via `namei` if traversal is blocked).
 On the **source** machine:
 
 ```bash
-./db_tool.sh dump /var/lib/neo4j/backup          # stops Neo4j, dumps, restarts it
+./scripts/db_tool.sh dump /var/lib/neo4j/backup          # stops Neo4j, dumps, restarts it
 # optional: --keep-running to leave the service stopped
 scp /var/lib/neo4j/backup/*.dump server:/path/to/dumps/
 ```
@@ -34,7 +37,7 @@ scp /var/lib/neo4j/backup/*.dump server:/path/to/dumps/
 On the **target** machine (as root/sudo, Neo4j stopped by the script):
 
 ```bash
-./db_tool.sh restore /path/to/dumps              # loads every *.dump, restarts Neo4j
+./scripts/db_tool.sh restore /path/to/dumps              # loads every *.dump, restarts Neo4j
 ```
 
 Pass explicit DB names as the second argument to dump/restore only a subset;
@@ -43,9 +46,9 @@ Pass explicit DB names as the second argument to dump/restore only a subset;
 **Dump only from a healthy state.** A dump captures whatever the graph looks
 like at that moment — including missing indexes or `todo` flags left by an
 interrupted `insert_embeddings.py`. So either run
-`python3 embedding_status.py` first (expect ~100% `done`, and
+`python3 scripts/embedding_status.py` first (expect ~100% `done`, and
 `SHOW INDEXES` complete), or after restoring run
-`python3 insert_embeddings.py` once — it is fast when only gaps/indexes are
+`python3 scripts/insert_embeddings.py` once — it is fast when only gaps/indexes are
 missing (it skips `done` nodes and uses `IF NOT EXISTS` for indexes).
 
 ## Embeddings only via export / import
@@ -75,8 +78,11 @@ environment.
 On the **source** machine (statuses must not be reset first):
 
 ```bash
-python3 export_embeddings.py export_$(date +%Y%m%d).json
+python3 scripts/export_embeddings.py data/export_$(date +%Y%m%d).json
 ```
+
+Write exports into `data/`: that directory is gitignored, so the vectors
+(they encode the graph corpus) never end up in the public repository.
 
 Read-only apart from writing the JSON. The file starts with a meta record:
 
@@ -93,14 +99,14 @@ Transfer the file (plus however you move the graph itself) to the target.
 On the **target** machine, in this exact order:
 
 ```bash
-# 1. restore/re-ingest the graph (whole-DB dump: ./db_tool.sh restore <dir>,
+# 1. restore/re-ingest the graph (whole-DB dump: ./scripts/db_tool.sh restore <dir>,
 #    otherwise your usual ingestion procedure)
 # 2. re-attach the exported embeddings BEFORE doing any embedding work
-python3 import_embeddings.py export_YYYYMMDD.json
+python3 scripts/import_embeddings.py data/export_YYYYMMDD.json
 # 3. compute only what is still missing + create all indexes
-python3 insert_embeddings.py
+python3 scripts/insert_embeddings.py
 # 4. verify
-python3 embedding_status.py
+python3 scripts/embedding_status.py
 ```
 
 `import_embeddings.py` verifies the meta record (`model` + `dims`) against the
@@ -127,7 +133,7 @@ alone does not — it never loads sentence-transformers.
 ### Verifying
 
 ```bash
-python3 embedding_status.py
+python3 scripts/embedding_status.py
 ```
 
 Read-only, runs in seconds. Expect ~100% `done` per field except the small
@@ -146,9 +152,9 @@ number of empty-text nodes. If anything shows `todo`, re-run
   the import and let `insert_embeddings.py` compute everything locally.
 - **A node's text changed between export and import** — the sha256 join key
   won't match, so its vector is skipped. If that node's status flag still says
-  `done` (it came across in the graph dump), `insert_embeddings.py` will not
+  `done` (it came across in the graph dump), `scripts/insert_embeddings.py` will not
   pick it up either. After changing ingestion data, run once with
-  `RESET_EMBEDDING_STATUS = True` in `insert_embeddings.py`.
+  `RESET_EMBEDDING_STATUS = True` in `scripts/insert_embeddings.py`.
 - **Everything shows `todo` after import** — the import was skipped or failed;
   check its output before re-running `insert_embeddings.py`, otherwise the
   full set gets recomputed.

@@ -3,12 +3,12 @@
 #
 # Use cases:
 #   - Move a ready-to-ship database from the dev machine to a server:
-#       ./db_tool.sh dump   /path/to/outdir
+#       ./scripts/db_tool.sh dump   /path/to/outdir
 #       scp /path/to/outdir/*.dump server:/path/to/outdir/
 #       # on the server (as a user with sudo, neo4j service stopped by script):
-#       ./db_tool.sh restore /path/to/outdir
+#       ./scripts/db_tool.sh restore /path/to/outdir
 #   - Take a nightly local snapshot:
-#       ./db_tool.sh dump /backup/neo4j
+#       ./scripts/db_tool.sh dump /backup/neo4j
 #
 # Each database becomes its own <DB>.dump file, produced by
 # `neo4j-admin database dump`. The files contain the ENTIRE database (nodes,
@@ -29,8 +29,8 @@
 # as a native (systemd) Neo4j with `neo4j-admin` on PATH.
 #
 # Usage:
-#   ./db_tool.sh dump    <to-dir>   [DB_NAME...] [--keep-running]
-#   ./db_tool.sh restore <from-dir> [DB_NAME...] [--no-start]
+#   ./scripts/db_tool.sh dump    <to-dir>   [DB_NAME...] [--keep-running]
+#   ./scripts/db_tool.sh restore <from-dir> [DB_NAME...] [--no-start]
 #
 # With no DB_NAME, dump handles every database found in the data directory
 # (plus `system`); restore loads every *.dump found in <from-dir>.
@@ -96,7 +96,7 @@ print_access_hint() {
     echo "  Any directory above the dump dir that is NOT traversable by 'others'" >&2
     echo "  (e.g. a home dir with drwxr-x---) blocks the dump even after chown." >&2
     echo "  Fix, e.g.:" >&2
-    echo "    sudo chmod o+x /home/palma             # allow traversal into your home" >&2
+    echo "    sudo chmod o+x <parent-of-dump-dir>   # allow traversal (e.g. your home)" >&2
     echo "    sudo chown $DATA_OWNER:adm \"$path\"    # allow writing the dump dir itself" >&2
     echo "  Or simply use: /var/lib/neo4j/backup  (already owned by neo4j)" >&2
 }

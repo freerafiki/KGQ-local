@@ -23,7 +23,5 @@ kill_port() {
     done
 }
 
-kill_port 8000
-kill_port 8080
 kill_port 28000
 kill_port 28080

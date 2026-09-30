@@ -16,7 +16,7 @@ Shared text builders live in embedding_text.py and MUST stay in lockstep with
 insert_embeddings.py.
 
 Usage:
-    python3 export_embeddings.py [output.json]
+    python3 scripts/export_embeddings.py [output.json]
 """
 
 import argparse
@@ -27,6 +27,11 @@ from datetime import datetime
 
 from dotenv import load_dotenv
 from neo4j import GraphDatabase, RoutingControl
+
+# Shared modules live in the repo root, one level up.
+import sys
+from pathlib import Path
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from embedding_text import TEXT_BUILDERS, EMBEDDING_MODEL_NAME, EMBEDDING_DIMS
 

@@ -1,5 +1,5 @@
 """
-Shared search core used by the CLI (query_single.py) and the FastAPI app (app.py).
+Shared search core used by the CLI (scripts/query_single.py) and the FastAPI app (app.py).
 
 All retrieval logic lives here so that any improvement to the query mechanism
 (new indexes, query expansion, reranking, score normalization, ...) benefits
@@ -14,7 +14,6 @@ Future search strategies to implement here (and expose via new endpoints):
 """
 
 import os
-import subprocess
 import time
 
 from dotenv import load_dotenv
@@ -44,17 +43,6 @@ def close_driver():
     if _driver is not None:
         _driver.close()
         _driver = None
-
-
-def get_lan_ips():
-    """Non-loopback IPv4 addresses of this machine (for LAN access notices)."""
-    try:
-        out = subprocess.check_output(["hostname", "-I"], text=True).split()
-    except Exception:
-        return ["127.0.0.1"]
-    ips = [ip for ip in out if not ip.startswith("127.")]
-    return ips or ["127.0.0.1"]
-
 
 # Hybrid search: BM25 fulltext + 5 vector indexes + authors fulltext, fused with wRRF.
 # The fulltext score is unbounded (BM25-like); cosine scores live in ~[0,1].
@@ -747,11 +735,12 @@ def get_node_detail(element_id):
     }
 
     for k, v in props.items():
-        if isinstance(v, (list, tuple)) and len(v) > 30 and all(
-                isinstance(x, (int, float)) for x in v):
-            entry["vectorProps"][k] = len(v)
-        else:
-            entry["properties"][k] = v
+        if not k.endswith("mbeddingStatus"):
+            if isinstance(v, (list, tuple)) and len(v) > 30 and all(
+                    isinstance(x, (int, float)) for x in v):
+                entry["vectorProps"][k] = len(v)
+            else:
+                entry["properties"][k] = v
 
     # Same FormalType string the "Formal type" section shows, lifted to the
     # top level so the header badge can map it to Doc/Model/Plan/Norm/Data.

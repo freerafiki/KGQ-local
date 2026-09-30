@@ -34,22 +34,21 @@ The concerns, mapped:
   spare.
 - **Ports:** API `28000` (`app.py` binds `127.0.0.1:28000` in `__main__`;
   `static/index.html` targets `hostname:28000`), static frontend `28080`.
-  The README's 8000/8080 are stale — `stop_servers.sh` still cleans up both
-  pairs.
+  `scripts/stop_servers.sh` cleans up both ports.
 - **Frontend:** it is fully static (two HTML files, no build step), so it needs
-  no service of its own. Today `run_frontend.sh` uses `python3 -m http.server`,
+  no service of its own. Today `scripts/run_frontend.sh` uses `python3 -m http.server`,
   a dev server; in production serve `static/` from the reverse proxy or mount
   it with FastAPI's
   [StaticFiles](https://fastapi.tiangolo.com/tutorial/static-files/).
 - **API base URL:** `static/index.html` and `static/node.html` pick it
-  automatically — served from ports `28080`/`8080` (the dev static server)
+  automatically — served from port `28080` (the dev static server)
   they call `hostname:28000` directly; from any other origin they use
   **same-origin**, i.e. the reverse proxy must forward `/search`, `/node` and
   `/health` to the backend (see Option A′).
 - **Bind:** keep the API on `127.0.0.1` and expose it only through the proxy,
-  instead of `uvicorn --host 0.0.0.0` as in the README.
-- **CORS:** `allow_origins=["*"]` in `app.py` is marked dev-only. It becomes
-  irrelevant (and can be tightened) once proxy and API share an origin.
+  never `uvicorn --host 0.0.0.0`.
+- **CORS:** none needed — `app.py` has no CORS middleware. The dev-only
+  `allow_origins=["*"]` setup was removed once proxy and API shared an origin.
 - **Neo4j dependency:** the service must start after Neo4j is up (systemd:
   `After=neo4j.service`; Docker: depends_on/healthcheck, or tolerate a slow
   first request). The driver is created lazily, so a restart order glitch
@@ -57,7 +56,7 @@ The concerns, mapped:
 - **Health check:** `GET /health` already exists — use it for the systemd
   watchdog, Docker `HEALTHCHECK`, or the proxy's upstream check.
 - **Model availability:** the model loads from the local Hugging Face cache at
-  startup (the app never calls `login()`; only `insert_embeddings.py` needs
+  startup (the app never calls `login()`; only `scripts/insert_embeddings.py` needs
   `HF_TOKEN`, and bge-m3 is public). Pre-populate the cache on the server or
   mount it as a volume so restarts don't depend on the network.
 - **Config:** everything comes from `.env` (`python-dotenv`); systemd uses
@@ -78,8 +77,8 @@ After=network-online.target neo4j.service
 Wants=network-online.target
 
 [Service]
-WorkingDirectory=/home/palma/code/CSRCC/KGQ-local
-EnvironmentFile=/home/palma/code/CSRCC/KGQ-local/.env
+WorkingDirectory=/path/to/KGQ-local
+EnvironmentFile=/path/to/KGQ-local/.env
 ExecStart=/path/to/venv/bin/uvicorn app:app --host 127.0.0.1 --port 28000 --workers 1
 Restart=on-failure
 RestartSec=5
@@ -104,7 +103,7 @@ server already runs Apache):
   ```
   search.example.org {
       reverse_proxy 127.0.0.1:28000
-      root * /home/palma/code/CSRCC/KGQ-local/static
+      root * /path/to/KGQ-local/static
       file_server
   }
   ```
@@ -112,7 +111,7 @@ server already runs Apache):
 - **nginx + Certbot** — the traditional combination, more configuration.
 
 **Pros:** no new tooling to learn, native integration with the existing
-Neo4j systemd install (same patterns as `db_tool.sh`), low overhead.
+Neo4j systemd install (same patterns as `scripts/db_tool.sh`), low overhead.
 **Cons:** machine-specific setup, not portable to another host without
 repeating it.
 
@@ -124,11 +123,10 @@ role — no Caddy/nginx to add. Apache does both jobs:
 - serves the static frontend (`DocumentRoot` → `static/`, **no extra service**),
 - reverse-proxies `/search`, `/node`, `/health` to the private uvicorn on
   `127.0.0.1:28000`, so the backend is never exposed publicly and the browser
-  stays same-origin (which also makes the dev-only `allow_origins=["*"]`
-  CORS in `app.py` unnecessary in production).
+  stays same-origin (which is why `app.py` needs no CORS middleware).
 
 The backend runs as the `kgq.service` unit from Option A. The frontend JS
-already handles the split: on ports `28080`/`8080` (local dev) it calls
+already handles the split: on port `28080` (local dev) it calls
 `:28000` directly, everywhere else it uses same-origin.
 
 Enable the proxy/SSL modules and the vhost:
@@ -144,8 +142,8 @@ sudo certbot --apache -d search.example.org    # HTTPS + automatic renewal
 <VirtualHost *:443>
     ServerName search.example.org
 
-    DocumentRoot /home/palma/code/CSRCC/KGQ-local/static
-    <Directory /home/palma/code/CSRCC/KGQ-local/static>
+    DocumentRoot /path/to/KGQ-local/static
+    <Directory /path/to/KGQ-local/static>
         Require all granted
     </Directory>
 
@@ -164,9 +162,9 @@ sudo certbot --apache -d search.example.org    # HTTPS + automatic renewal
 origin end-to-end; backend loopback-only; certbot handles HTTPS/renewal.
 **Cons:** the vhost lives outside the repo (keep it documented here); Apache
 must be able to *traverse* to the repo's `static/` dir — home directories are
-often `750`, so check with `namei -l /home/palma/code/CSRCC/KGQ-local/static`
+often `750`, so check with `namei -l /path/to/KGQ-local/static`
 and `chmod o+x` the path components if `www-data` cannot read it (same
-trouble `db_tool.sh` diagnoses for Neo4j).
+trouble `scripts/db_tool.sh` diagnoses for Neo4j).
 
 ## Option B — Docker (+ compose)
 
@@ -205,12 +203,12 @@ volumes:
 ```
 
 Neo4j can stay a host/native install (point `NEO4J_URI` at it) or become its
-own container — note the `db_tool.sh` dump/restore tooling assumes a **native**
+own container — note the `scripts/db_tool.sh` dump/restore tooling assumes a **native**
 systemd Neo4j, so keep that trade-off in mind.
 
 **Pros:** identical everywhere, easy hand-off, restart policies built in.
 **Cons:** image + model-cache size, another layer to debug, native-tool
-assumptions (like `db_tool.sh`) don't transfer into the container.
+assumptions (like `scripts/db_tool.sh`) don't transfer into the container.
 
 ## Decision helpers
 
@@ -219,7 +217,7 @@ assumptions (like `db_tool.sh`) don't transfer into the container.
 - Want the same artifact on several machines, or the target environment is
   container-first → **Option B**.
 - Either way: proxy in front for HTTPS, `--workers 1`, `Enable`/`restart`
-  policy on, verify `/health`, and check `embedding_status.py` on the graph
+  policy on, verify `/health`, and check `scripts/embedding_status.py` on the graph
   before pointing traffic at it.
 
 Official docs, for later:

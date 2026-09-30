@@ -21,7 +21,7 @@ flagged 'done', so the insert run then only computes what is still missing and
 creates the indexes.
 
 Usage:
-    python3 import_embeddings.py [input.json]
+    python3 scripts/import_embeddings.py [input.json]
 """
 
 import argparse
@@ -31,6 +31,11 @@ import os
 
 from dotenv import load_dotenv
 from neo4j import GraphDatabase, RoutingControl
+
+# Shared modules live in the repo root, one level up.
+import sys
+from pathlib import Path
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from embedding_text import (
     TEXT_BUILDERS,

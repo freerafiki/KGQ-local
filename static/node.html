@@ -161,9 +161,9 @@
   </div>
 
   <script>
-    // Same rule as index.html: dev static server (28080/8080) hits :28000
+    // Same rule as index.html: dev static server (28080) hits :28000
     // directly, any other origin goes same-origin through the reverse proxy.
-    const API_BASE = (location.port === '28080' || location.port === '8080')
+    const API_BASE = (location.port === '28080')
       ? location.protocol + '//' + location.hostname + ':28000'
       : '';
     const BADGE_CLASS = { 'Oggetto Informativo': 'oi', 'Raccomandazione': 'rec', 'Lacuna': 'gap', 'Progetto': 'prj', 'Full-text': 'ft' };
@@ -421,7 +421,7 @@
       // ---- 2. Everything else --------------------------------------
       // Rendered further down, after the connected Recs/Gaps.
       const propRows = Object.entries(props)
-        .filter(([k]) => !isStatusKey(k) && !overviewKeys.has(k))
+        .filter(([k]) => !overviewKeys.has(k))
         .map(([k, v]) =>
           '<tr><td class="k">' + esc(PROP_LABELS[k] || k) + '</td><td class="v">' + formatValue(v) + '</td></tr>'
         ).join('');
@@ -469,8 +469,9 @@
         html += '<div class="section"><div class="empty">No stored properties.</div></div>';
       }
 
-      // Assisted by / Reviewed by, then the embedding bookkeeping: the very
-      // bottom of the page (after the connected Recs/Gaps).
+      // Assisted by / Reviewed by, at the very bottom of the page (after the
+      // connected Recs/Gaps). Embedding-status flags never appear here: the
+      // API strips them as internal bookkeeping.
       const assisted = (related.user && related.user.items) || [];
       html += '<div class="section"><h2>Assisted by / Reviewed by</h2><table class="props">' +
         '<tr><td class="k">Assisted by</td><td class="v">' +
@@ -481,21 +482,8 @@
         '</td></tr>' +
         '</table></div>';
 
-      // Statuses (embeddings bookkeeping, small)
-      const statusRows = Object.entries(props).filter(([k]) => isStatusKey(k));
-      if (statusRows.length) {
-        html += '<div class="section"><h2>Embedding status</h2><table class="props">' +
-          statusRows.map(([k, v]) => '<tr><td class="k">' + esc(k) + '</td><td class="v">' + esc(v) + '</td></tr>').join('') +
-          '</table></div>';
-      }
-
       html += '<div class="sub">db_id: ' + esc(d.eid) + '</div>';
       document.getElementById('content').innerHTML = html;
-    }
-
-    // `embeddingStatus` (Rec/Gap/Project) and `*EmbeddingStatus` (Contribution).
-    function isStatusKey(k) {
-      return /embeddingStatus$/i.test(k);
     }
 
     function tagList(items) {

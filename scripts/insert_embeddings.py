@@ -4,6 +4,12 @@ from dotenv import load_dotenv
 from neo4j import GraphDatabase, RoutingControl
 from huggingface_hub import login
 from tqdm import tqdm
+
+# Shared modules live in the repo root, one level up.
+import sys
+from pathlib import Path
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+
 from query_config import embedding_dims, embedding_model
 from embedding_text import (
     contribution_description_text,

@@ -5,7 +5,7 @@ via transformers (CPU-friendly). Useful for picking a model + prompt before
 wiring rewriting into your retrieval pipeline.
 
 Usage:
-    python rewrite_query.py -Q "cheap apartments venice" \
+    python3 scripts/rewrite_query.py -Q "cheap apartments venice" \
         --context "Domain: Italian municipal planning documents. \
 Prefer bureaucratic terminology, e.g. PRG, variante, vincolo paesaggistico, \
 edilizia residenziale pubblica, contributo affitto."

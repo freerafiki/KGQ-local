@@ -1,8 +1,11 @@
 """
 KGQ Search API
 
-Run with:  uvicorn app:app --host 0.0.0.0 --port 28000
+Run with:  uvicorn app:app --host 127.0.0.1 --port 28000
    (or:    python app.py)
+In production it runs loopback-only behind the Apache proxy — see
+possible_deployments.md; the schema endpoints (/docs, /openapi.json) are
+disabled below.
 
 Exposes the hybrid retrieval pipeline implemented in query_util.run_search().
 
@@ -20,7 +23,6 @@ import logging
 import time
 
 from fastapi import FastAPI, HTTPException, Request
-from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 from typing import Literal
 from prometheus_fastapi_instrumentator import Instrumentator
@@ -41,8 +43,8 @@ class FilterModel(BaseModel):
 
 class SearchRequest(BaseModel):
     query: str
-    source_k: int = Field(default=10, ge=1, description="Candidates pulled per source")
-    final_k: int = Field(default=20, ge=1, description="Final merged results to return")
+    source_k: int = Field(default=20, ge=1, description="Candidates pulled per source")
+    final_k: int = Field(default=50, ge=1, description="Final merged results to return")
     rrf_constant: int = Field(default=60, ge=1, description="wRRF denominator offset")
     filters: FilterModel | None = Field(
         default=None, description="Result filters (e.g. restrict to specific node types)"
@@ -51,32 +53,23 @@ class SearchRequest(BaseModel):
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # query_util.get_driver() is lazy; nothing to do here besides a health check.
-    for ip in query_util.get_lan_ips():
-        logger.info("API on http://%s:28000  (LAN access)", ip)
+    # Startup: nothing to do — the embedding model is loaded at import time
+    # (query_config.py) and the Neo4j driver is created lazily on first use.
     yield
+    # Shutdown: close the Neo4j connection pool while uvicorn is still
+    # draining, instead of letting the sockets die with the process.
     query_util.close_driver()
 
 
-app = FastAPI(title="KGQ Search API", lifespan=lifespan)
-
-# The HTML page is served from a separate static server (python -m http.server)
-# on another port, so the API must allow cross-origin requests from it.
-# Dev-only: open to any origin; tighten before any real deployment.
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"],
-    allow_methods=["GET", "POST"],
-    allow_headers=["*"],
-)
+app = FastAPI(title="KGQ Search API", lifespan=lifespan, docs_url=None, redoc_url=None, openapi_url=None)
 
 
 @app.middleware("http")
 async def timing_middleware(request: Request, call_next):
     """Standard per-request timing line: method, path, status, duration."""
-    started = time.perf_counter()
-    response = await call_next(request)
-    logger.info("%s %s -> %d in %.3fs",
+    started = time.perf_counter()           # request has arrived
+    response = await call_next(request)     # hand off to the next inner layer and wait until the response comes back
+    logger.info("%s %s -> %d in %.3fs",     # logs when the response is going out from the server (timing server-side)
                 request.method, request.url.path,
                 response.status_code, time.perf_counter() - started)
     return response
@@ -95,7 +88,12 @@ def health():
 
 @app.post("/search")
 def search(req: SearchRequest):
-    """Hybrid search: BM25 fulltext + vector indexes, fused via wRRF."""
+    """
+    Hybrid search: BM25 fulltext + vector indexes, fused via wRRF.
+    It is a work in progress, started including few items, now it includes more.
+    Few full-text indices are used to search full-text (although this has the language problem)
+    Other vector indices are created to use semantic similarity for finding content
+    """
     query_preview = req.query if len(req.query) <= 100 else req.query[:100] + "\u2026"
     types = req.filters.types if req.filters else None
     started = time.perf_counter()
@@ -119,7 +117,10 @@ def search(req: SearchRequest):
 
 @app.get("/node/{eid}")
 def node_detail(eid: str):
-    """Full properties of one node + its OI <-> Rec/Gap neighbourhood."""
+    """
+    Full properties of one node + its OI <-> Rec/Gap neighbourhood.
+    This is used for discovering/exploring single results after the search
+    """
     detail = query_util.get_node_detail(eid)
     if detail is None:
         raise HTTPException(status_code=404, detail=f"Node not found: {eid}")

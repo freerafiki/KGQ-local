@@ -1,6 +1,12 @@
 import argparse
 import json
 import os
+import sys
+from pathlib import Path
+
+# Shared modules (query_util, graph_helper, ...) live in the repo root, one
+# level up — keeps `python3 scripts/query_single.py` working from anywhere.
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 import query_util
 from graph_helper import GraphHelper

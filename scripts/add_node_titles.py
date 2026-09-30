@@ -6,7 +6,7 @@ description), which blow up result cards. Contribution already has `title`.
 This derives a compact `title` from the first words of the text field and
 stores it once on the node, so both the CLI and the API can show a short name.
 
-Run:  python3 add_node_titles.py
+Run:  python3 scripts/add_node_titles.py
 Idempotent: only fills nodes where `title` is missing/empty.
 """
 

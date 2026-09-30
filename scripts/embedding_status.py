@@ -4,13 +4,18 @@ nodes are `done`, `todo` or never flagged (`missing`), plus an ASCII bar chart.
 Read-only, runs in seconds.
 
 Usage:
-    python3 embedding_status.py
+    python3 scripts/embedding_status.py
 """
 
 import os
+import sys
+from pathlib import Path
 
 from dotenv import load_dotenv
 from neo4j import GraphDatabase, RoutingControl
+
+# Shared modules live in the repo root, one level up.
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from embedding_text import FIELD_STATUS
 
