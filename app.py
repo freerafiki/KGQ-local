@@ -23,6 +23,7 @@ import logging
 import time
 
 from fastapi import FastAPI, HTTPException, Request
+from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 from typing import Literal
 from prometheus_fastapi_instrumentator import Instrumentator
@@ -62,6 +63,18 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(title="KGQ Search API", lifespan=lifespan, docs_url=None, redoc_url=None, openapi_url=None)
+
+# Dev-only cross-origin: the page from scripts/run_frontend.sh (:28080) talks
+# straight to this API (:28000), a different origin, so the browser preflights
+# OPTIONS /search and must be answered. Restricted to those two dev origins —
+# production is same-origin behind the Apache proxy, where CORS never applies
+# and these origins are never the page's origin.
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["http://localhost:28080", "http://127.0.0.1:28080"],
+    allow_methods=["GET", "POST"],
+    allow_headers=["Content-Type"],
+)
 
 
 @app.middleware("http")

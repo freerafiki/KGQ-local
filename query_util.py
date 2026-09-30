@@ -145,6 +145,8 @@ RETURN
     n.content AS content,
     n.motivation AS motivation,
     n.description AS description,
+    n.releaseYear AS releaseYear,
+    oiParent.releaseYear AS parentReleaseYear,
     row.sources AS sources,
     row.sourceRanks AS sourceRanks,
     row.rawScores AS rawScores,
@@ -374,6 +376,10 @@ def _serialize(record):
         # Contributor filters: people and institutions, kept apart.
         "people": people,
         "institutions": institutions,
+        # Release year of the Contribution (the card shows it). Rec/Gap nodes
+        # carry no year of their own, so they take the parent OI's; Projects
+        # have neither -> None, and the card simply shows no year.
+        "releaseYear": record['releaseYear'] or record['parentReleaseYear'],
     }
     if entry["type"] == "Oggetto Informativo":
         entry.update({

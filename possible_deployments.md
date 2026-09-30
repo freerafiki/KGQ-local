@@ -47,8 +47,10 @@ The concerns, mapped:
   `/health` to the backend (see Option A′).
 - **Bind:** keep the API on `127.0.0.1` and expose it only through the proxy,
   never `uvicorn --host 0.0.0.0`.
-- **CORS:** none needed — `app.py` has no CORS middleware. The dev-only
-  `allow_origins=["*"]` setup was removed once proxy and API shared an origin.
+- **CORS:** none needed in production — same-origin, so the browser never
+  preflights. `app.py` keeps a strict dev allowlist (`http://localhost:28080`,
+  `http://127.0.0.1:28080`) for the split page/API dev setup; it never matches a
+  public origin. The old wildcard `allow_origins=["*"]` must not come back.
 - **Neo4j dependency:** the service must start after Neo4j is up (systemd:
   `After=neo4j.service`; Docker: depends_on/healthcheck, or tolerate a slow
   first request). The driver is created lazily, so a restart order glitch
@@ -123,7 +125,8 @@ role — no Caddy/nginx to add. Apache does both jobs:
 - serves the static frontend (`DocumentRoot` → `static/`, **no extra service**),
 - reverse-proxies `/search`, `/node`, `/health` to the private uvicorn on
   `127.0.0.1:28000`, so the backend is never exposed publicly and the browser
-  stays same-origin (which is why `app.py` needs no CORS middleware).
+  stays same-origin (which is why production needs no CORS — only the
+  dev allowlist in `app.py` ever applies).
 
 The backend runs as the `kgq.service` unit from Option A. The frontend JS
 already handles the split: on port `28080` (local dev) it calls

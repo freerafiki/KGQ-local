@@ -38,9 +38,10 @@ uvicorn app:app --host 127.0.0.1 --port 28000   # API
 ```
 
 The page picks the API base automatically: from the dev server (`:28080`) it
-calls `hostname:28000` directly, from any other origin it goes same-origin
-(`/search`, `/node`, `/health`) — which is how it works behind Apache without
-any CORS.
+calls `hostname:28000` directly — cross-origin, so `app.py` allows exactly
+`http://localhost:28080` and `http://127.0.0.1:28080` — and from any other
+origin it goes same-origin (`/search`, `/node`, `/health`), which is how it
+works behind Apache without any CORS at all.
 
 ## Repository layout
 

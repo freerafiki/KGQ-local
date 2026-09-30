@@ -192,6 +192,10 @@
     .toggle:hover { text-decoration: underline; }
     .scores { font-size: 13px; color: var(--muted); background: #f8f9fa; border-radius: 6px; padding: 6px 10px; overflow-wrap: anywhere; }
     .scores b { color: #202124; }
+    /* Reference person + year, squeezed between "Show more" and the scores. */
+    .card-meta { font-size: 13px; color: var(--muted); margin-bottom: 8px; overflow-wrap: anywhere; }
+    .card-meta .mlabel { color: #202124; font-weight: 700; }
+    .card-meta .msep { margin: 0 8px; }
     .parent-row { font-size: 13px; color: var(--muted); margin-top: 8px; }
     .parent-row .plabel { color: #202124; font-weight: 700; }
     .empty, .error, .loading { color: var(--muted); text-align: center; padding: 24px 0; }
@@ -749,11 +753,24 @@
         const badgeText  = (r.type === 'Oggetto Informativo')
           ? (oiWord || 'OI')
           : (BADGE_SHORT[r.type] || 'FT');
-        // Purpose, contributors and db_id are deliberately NOT shown on the
-        // card (they live on the node page) so more results fit the viewport.
+        // Purpose, the full contributor list and db_id are deliberately NOT
+        // shown on the card (they live on the node page) so more results fit
+        // the viewport — only the first person and the year are.
         const parentHtml = (r.type !== 'Oggetto Informativo') && r.parent_oi
           ? '<div class="parent-row"><span class="plabel">OI:</span> ' +
             escapeHtml(truncate(r.parent_oi.officialTitle || r.parent_oi.title, 120)) + '</div>'
+          : '';
+        // Reference person = the first contributing person (a result may have
+        // none: institutions only, or no actors at all). `r.people || r.actors`
+        // only falls back when the split is missing (older stored payloads),
+        // never when `people` is an empty list.
+        const refPerson = (r.people || r.actors || [])[0] || '';
+        const year = r.releaseYear || '';
+        const metaBits = [];
+        if (refPerson) metaBits.push('<span class="mlabel">Reference person:</span> ' + escapeHtml(truncate(refPerson, 80)));
+        if (year)      metaBits.push('<span class="mlabel">Year:</span> ' + escapeHtml(String(year)));
+        const metaHtml = metaBits.length
+          ? '<div class="card-meta">' + metaBits.join('<span class="msep">|</span>') + '</div>'
           : '';
         return '' +
           '<div class="card" data-eid="' + escapeHtml(r.neo4j_id) + '">' +
@@ -764,6 +781,7 @@
             '<div class="preview">' + escapeHtml(previewText(r)) + '</div>' +
             '<div class="full">' + fullBody(r) + '</div>' +
             '<button type="button" class="toggle">Show more</button>' +
+            metaHtml +
             '<div class="scores"><b>WRRF ' + r.wrrf_score.toFixed(4) + '</b> | ' + scoreText(r, ftMin, ftMax) + '</div>' +
             parentHtml +
           '</div>';
