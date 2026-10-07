@@ -59,6 +59,7 @@ works behind Apache without any CORS at all.
   | `rewrite_query.py` | compare local LLM query rewrites |
   | `query_benchmark.py` | placeholder (currently empty) |
   | `db_tool.sh` | Neo4j dump/restore wrapper |
+  | `security_check.sh` | PASS/FAIL security assertions (CORS, schema endpoints) |
   | `run_frontend.sh` / `stop_servers.sh` | dev helpers |
 
 Run every script from the repository root — `.env` is looked up in the
@@ -67,6 +68,7 @@ current directory:
 ```bash
 python3 scripts/embedding_status.py
 ./scripts/db_tool.sh dump /var/lib/neo4j/backup
+./scripts/security_check.sh                          # re-check CORS / schema endpoints
 ```
 
 ## Never commit
