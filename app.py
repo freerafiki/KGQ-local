@@ -44,6 +44,14 @@ class FilterModel(BaseModel):
 
 class SearchRequest(BaseModel):
     query: str
+    mode: Literal["nl", "keywords", "title", "author"] = Field(
+        default="nl",
+        description=(
+            "Which sources are searched: nl = hybrid (BM25 + vectors + authors), "
+            "keywords = BM25 over body text only, title = BM25 over titles only, "
+            "author = BM25 over author names only (Contribution results)"
+        ),
+    )
     source_k: int = Field(default=20, ge=1, description="Candidates pulled per source")
     final_k: int = Field(default=50, ge=1, description="Final merged results to return")
     rrf_constant: int = Field(default=60, ge=1, description="wRRF denominator offset")
@@ -102,16 +110,19 @@ def health():
 @app.post("/search")
 def search(req: SearchRequest):
     """
-    Hybrid search: BM25 fulltext + vector indexes, fused via wRRF.
-    It is a work in progress, started including few items, now it includes more.
-    Few full-text indices are used to search full-text (although this has the language problem)
-    Other vector indices are created to use semantic similarity for finding content
+    Search with selectable sources (mode):
+      nl        hybrid default — BM25 fulltext + vector indexes + authors, wRRF fused
+      keywords  BM25 over the general fulltext index only (no embedding)
+      title     BM25 over the title_fulltext index only (no embedding)
+      author    BM25 over authors_fulltext only, resolves to Contributions (no embedding)
+    Text-only modes skip query embedding entirely, so they are faster and the
+    embedding model is not consulted (embedding_time_s = 0).
     """
     query_preview = req.query if len(req.query) <= 100 else req.query[:100] + "\u2026"
     types = req.filters.types if req.filters else None
     started = time.perf_counter()
-    logger.info("search IN   q=%r (source_k=%d, final_k=%d, rrf=%d%s)",
-                query_preview, req.source_k, req.final_k, req.rrf_constant,
+    logger.info("search IN   q=%r mode=%s (source_k=%d, final_k=%d, rrf=%d%s)",
+                query_preview, req.mode, req.source_k, req.final_k, req.rrf_constant,
                 ", types=" + ",".join(types) if types else "")
 
     result = query_util.run_search(
@@ -120,6 +131,7 @@ def search(req: SearchRequest):
         final_k=req.final_k,
         rrf_constant=req.rrf_constant,
         types=types,
+        mode=req.mode,
     )
     total = time.perf_counter() - started
     logger.info("search DONE q=%r embed=%.3fs neo4j=%.3fs total=%.3fs n=%d",

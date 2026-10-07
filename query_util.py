@@ -14,6 +14,7 @@ Future search strategies to implement here (and expose via new endpoints):
 """
 
 import os
+import re
 import time
 
 from dotenv import load_dotenv
@@ -72,6 +73,30 @@ _SOURCES_BY_LABEL = {
         ("project_embeddings", "queryVector", "project"),
     ],
 }
+
+SEARCH_MODES = ("nl", "keywords", "title", "author")
+
+# Lucene query-parser metacharacters. The fulltext indexes hand the query
+# string straight to Lucene, so an unescaped '(' or '"' (e.g. "edilizia
+# (residenziale", 'città "venezia') aborts the whole search with a parse
+# error, while "PRG: variante" is silently read as a field query against a
+# non-existent field and matches nothing.
+# Everything is escaped because the UI offers no operator syntax: users only
+# ever mean the literal characters. The embedded text for "nl" stays RAW —
+# the model must see the query as typed.
+_LUCENE_SPECIALS = '+-&|!(){}[]^"~*?:/\\'
+
+# Lucene's clause operators stay operators even as the only word ("AND"),
+# where metacharacter escaping does not apply — so their letters get escaped
+# too and they become plain terms.
+_LUCENE_RESERVED = re.compile(r"\b(AND|OR|NOT|TO)\b")
+
+
+def escape_lucene(text):
+    """Backslash-escape Lucene metacharacters (and clause operators)."""
+    escaped = "".join("\\" + c if c in _LUCENE_SPECIALS else c for c in text)
+    return _LUCENE_RESERVED.sub(lambda m: "\\" + m.group(1), escaped)
+
 
 _CYPHER_HEADER = """
 CYPHER 25
@@ -188,10 +213,34 @@ RETURN
 """
 
 
-def _vector_fragment(label, index, vec, source):
-    return f"""
-UNION ALL
+def _title_fragment(labels):
+    """Title-only fulltext source (`title_fulltext` index).
 
+    Same label filter as _fulltext_fragment, so the Doc Type checkboxes keep
+    working: an empty `labels` tuple means no WHERE clause at all.
+    """
+    where = ""
+    if labels:
+        conds = " OR ".join(f"'{lab}' IN labels(result)" for lab in labels)
+        where = f"\nWHERE {conds}"
+    return f"""
+CALL db.index.fulltext.queryNodes('title_fulltext', query, {{limit: $sourceK}})
+YIELD node AS result, score
+WITH result, score{where}
+ORDER BY score DESC, result.id ASC
+WITH collect({{node: result, rawScore: score}}) AS rows
+UNWIND CASE WHEN size(rows) = 0 THEN [] ELSE range(0, size(rows) - 1) END AS rankIndex
+RETURN
+    rows[rankIndex].node AS result,
+    'title' AS source,
+    rankIndex + 1 AS sourceRank,
+    rows[rankIndex].rawScore AS rawScore
+"""
+
+
+def _vector_fragment(label, index, vec, source):
+    # Bare subquery body: _build_cypher() joins the fragments with UNION ALL.
+    return f"""
 MATCH (result:{label})
     SEARCH result IN (
         VECTOR INDEX `{index}`
@@ -210,17 +259,26 @@ RETURN
 """
 
 
-def _authors_fragment():
-    return """
-UNION ALL
+def _authors_fragment(labels):
+    """Author source: BM25 over `authors_fulltext`, resolved to the Contribution
+    each actor contributed to.
 
-CALL db.index.fulltext.queryNodes('authors_fulltext', query, {limit: $sourceK})
+    `labels` applies the same Doc Type filter as the other sources, so in
+    `author` mode the result set empties out when Contribution is filtered out.
+    """
+    where = ""
+    if labels:
+        conds = " OR ".join(f"'{lab}' IN labels(oi)" for lab in labels)
+        where = f"\nWHERE {conds}"
+    # Bare subquery body: _build_cypher() joins the fragments with UNION ALL.
+    return f"""
+CALL db.index.fulltext.queryNodes('authors_fulltext', query, {{limit: $sourceK}})
 YIELD node AS actor, score
 WITH actor, score
 MATCH (actor)-[ra:contributed_to]->(oi:Contribution)
-WITH oi, max(score) AS score
+WITH oi, max(score) AS score{where}
 ORDER BY score DESC, oi.id ASC
-WITH collect({node: oi, rawScore: score}) AS rows
+WITH collect({{node: oi, rawScore: score}}) AS rows
 UNWIND CASE WHEN size(rows) = 0 THEN [] ELSE range(0, size(rows) - 1) END AS rankIndex
 RETURN
     rows[rankIndex].node AS result,
@@ -233,32 +291,52 @@ RETURN
 _cypher_cache = {}
 
 
-def _build_cypher(labels):
-    """Compose the hybrid query for the requested node labels.
+def _build_cypher(labels, mode="nl"):
+    """Compose the search query for the requested labels and search mode.
 
-    `labels` is None / empty => no filter, all sources. Otherwise only the
-    sources of the requested labels participate and the fulltext source is
-    restricted to those same labels.
+    `labels` is None / empty => no filter. Otherwise only the sources of the
+    requested labels participate and the fulltext source is restricted to
+    those same labels.
+
+    `mode` selects WHICH sources participate (see run_search):
+        nl        BM25 + every vector index + authors  (hybrid default)
+        keywords  BM25 over `search_fulltext` only
+        title     BM25 over `title_fulltext` only
+        author    BM25 over `authors_fulltext` only (Contribution rows)
+    The cache key therefore includes the mode: the fragment set differs.
     """
-    key = tuple(labels) if labels else ()
+    if mode not in SEARCH_MODES:
+        raise ValueError(f"unknown search mode {mode!r}; expected one of {SEARCH_MODES}")
+    key = (mode, tuple(labels) if labels else ())
     cached = _cypher_cache.get(key)
     if cached is not None:
         return cached
 
-    active = set(key)
+    active = set(key[1])
     if not active:
         active = set(_ALL_LABELS)
+    type_filter = key[1]
 
-    parts = [_CYPHER_HEADER, _fulltext_fragment(key)]
-    if "Contribution" in active:
-        parts.append(_authors_fragment())
-    for label in _ALL_LABELS:
-        if label in active:
-            for index, vec, source in _SOURCES_BY_LABEL[label]:
-                parts.append(_vector_fragment(label, index, vec, source))
-    parts.append(_CYPHER_FUSION_TAIL)
+    fragments = []
+    if mode in ("nl", "keywords"):
+        fragments.append(_fulltext_fragment(type_filter))
+    elif mode == "title":
+        fragments.append(_title_fragment(type_filter))
+    # author mode always runs the authors fragment: the label filter inside it
+    # empties the branch when Contribution is filtered out of the results.
+    if mode == "author" or (mode == "nl" and "Contribution" in active):
+        fragments.append(_authors_fragment(type_filter))
+    if mode == "nl":
+        for label in _ALL_LABELS:
+            if label in active:
+                for index, vec, source in _SOURCES_BY_LABEL[label]:
+                    fragments.append(_vector_fragment(label, index, vec, source))
 
-    cypher = "".join(parts)
+    # Every fragment is a bare `CALL/MATCH ... RETURN` body; the UNIONs are the
+    # JOINS between them, not part of the fragments. That matters for modes
+    # with a single source (title/author): a leading UNION ALL would open the
+    # subquery and be a syntax error.
+    cypher = _CYPHER_HEADER + "\nUNION ALL\n".join(fragments) + _CYPHER_FUSION_TAIL
     _cypher_cache[key] = cypher
     return cypher
 
@@ -425,35 +503,58 @@ def embed_query(text: str):
 
 
 def run_search(query_text, source_k=20, final_k=50, rrf_constant=60,
-               source_weights=None, types=None):
-    """Run the hybrid search (fulltext + vectors, wRRF fusion).
+               source_weights=None, types=None, mode="nl"):
+    """Run the search (hybrid by default; the text-only modes skip embedding).
 
     Args:
+        mode: one of SEARCH_MODES — which retrieval sources participate:
+            "nl"        hybrid default: BM25 + every vector index + authors,
+                        wRRF-fused (this is what the UI calls
+                        "natural language")
+            "keywords"  BM25 over `search_fulltext` only
+            "title"     BM25 over `title_fulltext` only
+            "author"    BM25 over `authors_fulltext` only (Contribution rows)
+            Text-only modes do NOT embed the query, so `embedding_time_s` is
+            0 and no model call happens.
         types: optional list of Neo4j labels to restrict results to
             ("Contribution", "Recommendation", "Gap", "Project"). Empty/None
-            => all types.
+            => all types. In "author" mode results are Contributions anyway,
+            so filtering to another type yields an empty result set.
 
     Returns:
         {
           "query": str,
+          "mode": str,
           "types": [str] | None,
           "embedding_time_s": float,
           "search_time_s": float,
           "results": [ { ... per-result dict, see _serialize ... } ]
         }
     """
-    if source_weights is None:
-        source_weights = chooseSourceWeights(query_text)
+    if mode not in SEARCH_MODES:
+        raise ValueError(f"unknown search mode {mode!r}; expected one of {SEARCH_MODES}")
 
-    start = time.time()
-    query_embedding = embed_query(query_text)
-    embedding_time = time.time() - start
+    if source_weights is None:
+        # Only the hybrid mode fuses several sources, so only it needs the
+        # length-based heuristic. Text-only modes run a single source, whose
+        # weight is the same for every row (=> ranking unaffected), so they
+        # rely on coalesce(sourceWeights[source], 1.0) in the fusion tail.
+        source_weights = chooseSourceWeights(query_text) if mode == "nl" else {}
+
+    if mode == "nl":
+        start = time.time()
+        query_embedding = embed_query(query_text)
+        embedding_time = time.time() - start
+    else:
+        query_embedding = None
+        embedding_time = 0.0
 
     driver = get_driver()
     start_q = time.time()
     records, summary, keys = driver.execute_query(
-        _build_cypher(types),
-        query=query_text,
+        _build_cypher(types, mode),
+        # Lucene sees the escaped form; the embedding above used the raw text.
+        query=escape_lucene(query_text),
         queryVector=query_embedding,
         shortQueryVector=query_embedding,
         longQueryVector=query_embedding,
@@ -468,6 +569,7 @@ def run_search(query_text, source_k=20, final_k=50, rrf_constant=60,
 
     return {
         "query": query_text,
+        "mode": mode,
         "types": tuple(types) if types else None,
         "embedding_time_s": round(embedding_time, 4),
         "search_time_s": round(search_time, 4),

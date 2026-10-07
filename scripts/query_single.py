@@ -20,11 +20,13 @@ def main(args):
         final_k=args.final_k,
         rrf_constant=args.rrf_constant,
         types=types,
+        mode=args.mode,
     )
     records = result['results']
     elapsed = result['embedding_time_s']
     elapsed_q = result['search_time_s']
 
+    print(f"Mode: {result['mode']}")
     print(f"Embedding the query text took {elapsed:.3f} seconds")
     print(f"Running the query text took {elapsed_q:.3f} seconds\n")
 
@@ -82,6 +84,7 @@ def main(args):
     # Save results to JSON
     output_data = {
         "user_query": result['query'],
+        "mode": result['mode'],
         "embedding_time_seconds": elapsed,
         "search_time_seconds": elapsed_q,
         "results": records,
@@ -103,6 +106,14 @@ if __name__ == "__main__":
     parser.add_argument("--source_k", type=int, default=10, help="candidates pulled per source")
     parser.add_argument("--final_k", type=int, default=20, help="final merged results to return")
     parser.add_argument("--rrf_constant", type=int, default=60, help="wRRF denominator offset")
+    parser.add_argument(
+        "--mode",
+        type=str,
+        default="nl",
+        choices=list(query_util.SEARCH_MODES),
+        help="which sources to search: nl = hybrid (default), "
+             "keywords/title/author = text-only, no embedding",
+    )
     parser.add_argument(
         "--types",
         type=str,
