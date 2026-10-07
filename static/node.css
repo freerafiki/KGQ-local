@@ -15,7 +15,7 @@
   --paper: #c5221f;
   --model: #00897b;
   --plan: #1967d2;
-  --norm: #8430ce;
+  --law: #8430ce;
   --dataset: #b06000;
   /* Purpose tier: PASTEL chip backgrounds (dark text) — the muted
      counterpart of index.html's purpose dots; badges keep the
@@ -59,11 +59,12 @@ body {
 .badge.paper { background: var(--paper); }
 .badge.model { background: var(--model); }
 .badge.plan { background: var(--plan); }
-.badge.norm { background: var(--norm); }
+.badge.law { background: var(--law); }
 .badge.dataset { background: var(--dataset); }
 .badge.ft { background: var(--muted); }
-/* The header badge is a link into the matching Doc Type facet
-   (index.html?docType=...) when the doc type is known. */
+/* The header badge is a link into the matching filter facet
+   (index.html?docType=... for documents/Project, ?include=... for
+   Indications/Gap) when the doc type is known. */
 a.badge { text-decoration: none; cursor: pointer; }
 a.badge:hover { filter: brightness(.92); }
 /* Badge icon: <use> into the inline Lucide sprite at the top of <body>;
@@ -122,7 +123,7 @@ a.tag:hover { text-decoration: underline; }
 .link-item .l-badge { font-size: 11px; font-weight: 700; margin-right: 8px; }
 .l-badge.oi { color: var(--oi); } .l-badge.rec { color: var(--rec); } .l-badge.gap { color: var(--gap); } .l-badge.prj { color: var(--prj); }
 .l-badge.paper { color: var(--paper); } .l-badge.model { color: var(--model); } .l-badge.plan { color: var(--plan); }
-.l-badge.norm { color: var(--norm); } .l-badge.dataset { color: var(--dataset); }
+.l-badge.law { color: var(--law); } .l-badge.dataset { color: var(--dataset); }
 .link-item .l-title { font-weight: 600; color: var(--accent); }
 .link-item .l-snippet { color: var(--muted); font-size: 13px; margin-top: 4px; overflow-wrap: anywhere; }
 .link-item .l-rel { font-size: 12px; color: var(--muted); margin-top: 4px; }

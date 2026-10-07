@@ -4,16 +4,17 @@
 // Vue build compiles it at mount); this module turns the /node/{eid} payload
 // into the page's view model and builds the cross-page drill-down links:
 //   people/institutions -> index.html?mode=author&q=NAME  (Authors search)
-//   purposes            -> index.html?purpose=LABEL       (Purpose facet)
+//   purposes            -> index.html?purpose=LABEL       (Main purpose facet)
 //   document types      -> index.html?docType=WORD        (Doc Type facet)
+//   Indications/Gap     -> index.html?include=WORD        (Include also facet)
+//   release year        -> index.html?year=YYYY           (Time filter)
 //   entities            -> node.html?eid=...              (their node page)
-// The release year keeps a PLANNED link (a search filtered by year) and stays
-// plain text until that filter exists — see the note in PROP_LABELS.
 
 import { createApp, computed, onMounted, ref } from '../vendor/vue.esm-browser.prod.js';
 import { BADGE_CLASS, BADGE_SHORT, formalBadge, truncate, PURPOSE_CLASS } from './dom.js';
-// The Doc Type taxonomy (value <-> graph type pairing) is the search page's
-// filter data; importing it keeps the facet links from drifting out of sync.
+// The type taxonomy (value <-> graph type pairing, and which filter group
+// owns the entry) is the search page's filter data; importing it keeps the
+// facet links from drifting out of sync.
 import { TYPE_ENTRIES } from './state.js';
 import { fetchNode } from './api.js';
 import LinkCard from './components/link-card.js';
@@ -47,9 +48,8 @@ const PROP_LABELS = {
   knowledge: 'Knowledge',
   policy: 'Policy',
   id: 'ID',
-  // Release year: PLANNED to become a link — a search filtered to all
-  // documents sharing that year. The year filter doesn't exist yet, so it
-  // stays a plain value for now.
+  // Release year links to a search bounded to that year — the Time filter's
+  // single-year ?year=YYYY form (built in extraRows below).
   releaseYear: 'Release year',
   releaseDate: 'Release date',
   grant: 'Grant',
@@ -103,6 +103,7 @@ const nodeHref = eid => 'node.html?eid=' + encodeURIComponent(eid);
 const authorHref = name => 'index.html?mode=author&q=' + encodeURIComponent(name);
 const purposeHref = label => 'index.html?purpose=' + encodeURIComponent(label);
 const docTypeHref = word => 'index.html?docType=' + encodeURIComponent(word);
+const includeHref = word => 'index.html?include=' + encodeURIComponent(word);
 
 // Only http(s) links are clickable; anything else renders as plain text.
 function safeHref(url) {
@@ -183,12 +184,13 @@ function briefCard(brief) {
   };
 }
 
-// Where the header badge drills into the Doc Type filter: the 5 formal words
-// map 1:1 onto their entries, Rec/Gap/Project onto the type entries' values.
-function docTypeTarget(type, word) {
-  if (word) return word;
+// Where the header badge drills into the filters: the 5 formal words and
+// Project open Doc Type (?docType=), Rec/Gap open Include also (?include=).
+function filterHref(type, word) {
+  if (word) return docTypeHref(word);
   const entry = TYPE_ENTRIES.find(e => e.type === type);
-  return entry ? entry.value : '';
+  if (!entry) return '';
+  return entry.group === 'includeAlso' ? includeHref(entry.value) : docTypeHref(entry.value);
 }
 
 const NodePage = {
@@ -198,9 +200,9 @@ const NodePage = {
     const error = ref('');
     const data = ref(null);
 
-    // Badge + headline. The badge links into the Doc Type filter when the
-    // document type is known (formal word, Rec/Gap/Project); an unknown or
-    // unmapped type keeps a plain badge.
+    // Badge + headline. The badge links into the matching filter group when
+    // the document type is known (formal word/Project -> Doc Type, Rec/Gap
+    // -> Include also); an unknown or unmapped type keeps a plain badge.
     const header = computed(() => {
       const d = data.value;
       if (!d) return null;
@@ -213,12 +215,11 @@ const NodePage = {
         || (ftBucket && ftBucket.items && ftBucket.items[0] ? ftBucket.items[0].label : '')
         || '';
       const word = d.type === 'Oggetto Informativo' ? formalBadge(ftRaw) : '';
-      const target = docTypeTarget(d.type, word);
       return {
         name,
         badgeClass: word ? word.toLowerCase() : (BADGE_CLASS[d.type] || 'ft'),
         badgeText: word || (BADGE_SHORT[d.type] || 'FT'),
-        badgeHref: target ? docTypeHref(target) : '',
+        badgeHref: filterHref(d.type, word),
       };
     });
 
@@ -294,7 +295,14 @@ const NodePage = {
       if (!d) return [];
       const rows = Object.entries(d.properties || {})
         .filter(([k]) => !OVERVIEW_KEYS.has(k))
-        .map(([k, v]) => ({ label: PROP_LABELS[k] || k, value: plainValue(v) }));
+        .map(([k, v]) => {
+          const row = { label: PROP_LABELS[k] || k, value: plainValue(v) };
+          // Release year drills into a Time-bounded search for that year.
+          if (k === 'releaseYear' && /^\d{4}$/.test(row.value)) {
+            row.href = 'index.html?year=' + row.value;
+          }
+          return row;
+        });
       Object.entries(d.vectorProps || {}).forEach(([k, dim]) => {
         rows.push({ label: PROP_LABELS[k] || k, value: dim + '-dim vector' });
       });

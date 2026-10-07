@@ -153,11 +153,9 @@ UNWIND limitedRows AS row
 WITH row, row.result AS n
 WITH row, n,
      [(n)-[rm:has_main_function]->(p:Purpose) | p.name] AS mainPurposeNames,
-     [(n)-[rs:has_secondary_function]->(p:Purpose) | p.name] AS secPurposeNames,
      [ (parent:Contribution)-[rp:recommends|highlights_gap]->(n) | parent ][0] AS oiParent
-WITH row, n, mainPurposeNames, secPurposeNames, oiParent,
+WITH row, n, mainPurposeNames, oiParent,
      [ (oiParent)-[rpm:has_main_function]->(p:Purpose) | p.name ] AS parentMainPurposeNames,
-     [ (oiParent)-[rps:has_secondary_function]->(p:Purpose) | p.name ] AS parentSecPurposeNames,
      [ (ca:ContributionActor)-[rc:contributed_to]->(n) | {name: ca.name, type: ca.type} ]
      + [ (ca2:ContributionActor)-[rc2:project_contributor]->(n) | {name: ca2.name, type: ca2.type} ] AS actorEntries
 RETURN
@@ -179,7 +177,6 @@ RETURN
     row.rawScores AS rawScores,
     elementId(n) AS neo4j_id,
     mainPurposeNames AS mainPurposeNames,
-    secPurposeNames AS secPurposeNames,
     oiParent.title AS parentTitle,
     oiParent.officialTitle AS parentOfficialTitle,
     oiParent.id AS parentId,
@@ -187,7 +184,6 @@ RETURN
     elementId(oiParent) AS parentNeo4jId,
     head([(oiParent)-[:has_formal_type]->(pft:FormalType) | properties(pft)]) AS parentFormalTypeProps,
     parentMainPurposeNames AS parentMainPurposeNames,
-    parentSecPurposeNames AS parentSecPurposeNames,
     actorEntries AS actorEntries,
     head([(n)-[:has_formal_type]->(ft:FormalType) | properties(ft)]) AS formalTypeProps,
     row.wrrf AS wrrf
@@ -445,14 +441,14 @@ def _serialize(record):
         # `officialTitle` (C2, English) and `title` (A1, Italian).
         "title": record['title'] or record['name'],
         "officialTitle": record['officialTitle'] or record['title'] or record['name'],
-        # Own purposes first, then the parent document's (Rec/Gap inherit
-        # their source document's purposes, which is what makes purpose
-        # filtering meaningful for them).
+        # MAIN purposes only: the search page's "Main purpose" filter is the
+        # main-purpose filter (stricter — a secondary function no longer
+        # matches). Rec/Gap nodes carry no purposes of their own, so they
+        # still inherit their source document's MAIN purposes, which is what
+        # keeps purpose filtering meaningful for them.
         "purposes": _purpose_labels(
             record['mainPurposeNames']
-            + record['secPurposeNames']
             + record['parentMainPurposeNames']
-            + record['parentSecPurposeNames']
         ),
         "actors": actors,
         # Contributor filters: people and institutions, kept apart.

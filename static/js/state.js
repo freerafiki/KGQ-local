@@ -9,23 +9,35 @@ import { formalBadge, FORMAL_TYPES, clampInt } from './dom.js';
 
 // ---- Filter taxonomy -------------------------------------------------------
 
-// Doc Type holds TWO axes: the 5 FormalType entries (these ARE the document
-// type of a Contribution — every one has exactly one) and the plain node
-// types (Rec/Gap/Project). They map differently, so they stay two lists.
+// Doc Type holds the 5 FormalType entries (these ARE the document type of a
+// Contribution — every one has exactly one) plus Project, its own node type;
+// Project joins them as the 6th box. Display order = the order the entries
+// were specified in (paper, plan, model, law, dataset, project).
 export const FORMAL_ENTRIES = [
   { value: 'Paper',   dot: 'paper' },
-  { value: 'Model',   dot: 'model' },
   { value: 'Plan',    dot: 'plan' },
-  { value: 'Norm',    dot: 'norm' },
+  { value: 'Model',   dot: 'model' },
+  { value: 'Law',     dot: 'law' },   // was "Norm", renamed everywhere
   { value: 'Dataset', dot: 'dataset' },
 ];
 
+// The plain node types. `group` says which filter group renders the entry:
+// Project sits with the documents in Doc Type, while Rec/Gap attach TO a
+// document and live in the separate "Include also" group. All three still
+// share one `store.types` map — they are ONE axis in the filter chain; only
+// the rendering and the URL params (docType vs include) split. `value` is
+// the checkbox/URL word (the displayed label, where they differ), `type` =
+// the node label the result carries (`r.type`).
 export const TYPE_ENTRIES = [
-  // `type` = the node label the result carries (`r.type`).
-  { value: 'Recommendation', dot: 'rec', label: 'Raccomandazioni (Rec)', type: 'Raccomandazione' },
-  { value: 'Gap',            dot: 'gap', label: 'Lacune (Gap)',          type: 'Lacuna' },
-  { value: 'Project',        dot: 'prj', label: 'Progetti (Project)',    type: 'Progetto' },
+  { value: 'Indications',   dot: 'rec', label: 'Indications', type: 'Raccomandazione', group: 'includeAlso' },
+  { value: 'Gap',           dot: 'gap', label: 'Gap',         type: 'Lacuna',          group: 'includeAlso' },
+  { value: 'Project',       dot: 'prj', label: 'Project',     type: 'Progetto',        group: 'docType' },
 ];
+
+// The two groups the type entries render in, pre-split so the template and
+// the URL contract can treat "the documents" and "include also" separately.
+export const PROJECT_ENTRIES = TYPE_ENTRIES.filter(e => e.group === 'docType');
+export const INCLUDE_ENTRIES = TYPE_ENTRIES.filter(e => e.group === 'includeAlso');
 
 // Checkbox values MUST stay the taxonomy labels from query_util.PURPOSE_CATEGORIES.
 // `desc` is the second line: Purpose.name with the category prefix stripped
@@ -40,12 +52,26 @@ export const PURPOSE_ENTRIES = [
   { value: 'Gap di conoscenza',  dot: 'pv-gap', desc: 'Evidenzia un limite o un gap di conoscenza' },
 ];
 
+// Name order for the People facet: compare the LAST word of each name so
+// authors list by surname ("Ada Rossi" sorts under Rossi). The full name is
+// the tie-break, keeping same-surname authors in given-name order; the
+// last-word rule also copes with particles ("Anna de Marchi" -> Marchi).
+export function bySurname(a, b) {
+  const last = n => {
+    const parts = String(n).trim().split(/\s+/);
+    return parts[parts.length - 1];
+  };
+  return last(a).localeCompare(last(b)) || a.localeCompare(b);
+}
+
 // The two contributor facets share one shape: a searchable checkbox list
 // (live substring query + OR-ed selections), reading a different payload
-// field. They are combined with AND — see visibleResults below.
+// field. They are combined with AND — see visibleResults below. `compare`
+// orders the offered list: People by surname, Institutions plain A-Z (an
+// organisation has no surname to key on — its whole string is the name).
 export const FACET_ENTRIES = [
-  { key: 'person',      field: 'people',       title: 'People',      emptyMsg: 'No matching people.' },
-  { key: 'institution', field: 'institutions', title: 'Institutions', emptyMsg: 'No matching institutions.' },
+  { key: 'person',      field: 'people',       title: 'People',      emptyMsg: 'No matching people.',      compare: bySurname },
+  { key: 'institution', field: 'institutions', title: 'Institutions', emptyMsg: 'No matching institutions.', compare: (a, b) => a.localeCompare(b) },
 ];
 
 // The search modes shown as tabs above the search bar, in display order.
@@ -94,6 +120,10 @@ export const store = reactive({
     person:      { query: '', selected: [] },
     institution: { query: '', selected: [] },
   },
+  // Time filter: the selected year bounds (null = that side still covers the
+  // full range of the current results) and whether docs WITHOUT a year are
+  // shown (the "show docs without year" checkbox under the slider).
+  year: { from: null, to: null, showMissing: true },
 });
 
 // ---- Facets ----------------------------------------------------------------
@@ -105,18 +135,67 @@ function pick(field, r) {
   return value || [];
 }
 
-function collectNames(field) {
+function collectNames(entry) {
   const names = [];
   for (const r of store.results) {
-    for (const a of pick(field, r)) if (!names.includes(a)) names.push(a);
+    for (const a of pick(entry.field, r)) if (!names.includes(a)) names.push(a);
   }
-  return names.sort((a, b) => a.localeCompare(b));
+  return names.sort(entry.compare);
 }
 
 // Built once per facet; recomputed only when `store.results` changes.
 export const FACET_NAMES = Object.fromEntries(
-  FACET_ENTRIES.map(e => [e.key, computed(() => collectNames(e.field))])
+  FACET_ENTRIES.map(e => [e.key, computed(() => collectNames(e))])
 );
+
+// ---- Time filter -----------------------------------------------------------
+
+// releaseYear as a number, or null when the payload has none (no year docs
+// are governed by the "show docs without year" checkbox).
+function yearOf(r) {
+  const raw = r.releaseYear;
+  if (raw === null || raw === undefined || raw === '') return null;
+  const y = Number(raw);
+  return Number.isFinite(y) ? y : null;
+}
+
+// The year span of the CURRENT result set — the slider's domain. Both bounds
+// are null when no result carries a year; the Time group then stays hidden.
+export const yearDomain = computed(() => {
+  let min = null;
+  let max = null;
+  for (const r of store.results) {
+    const y = yearOf(r);
+    if (y === null) continue;
+    if (min === null || y < min) min = y;
+    if (max === null || y > max) max = y;
+  }
+  return { min, max };
+});
+
+// ---- Filter entry counts ---------------------------------------------------
+
+// How many results the CURRENT result set holds per entry, for the three
+// checkbox groups (Doc Type, Include also, Main purpose). Counted over the
+// WHOLE set — the numbers stay stable while other filters are toggled and
+// only change with a new search (the user-facing meaning: "we have 33
+// Papers" in this result set).
+export const filterCounts = computed(() => {
+  const formal = Object.fromEntries(FORMAL_ENTRIES.map(e => [e.value, 0]));
+  const type = Object.fromEntries(TYPE_ENTRIES.map(e => [e.value, 0]));
+  const purpose = Object.fromEntries(PURPOSE_ENTRIES.map(e => [e.value, 0]));
+  for (const r of store.results) {
+    if (r.type === 'Oggetto Informativo') {
+      const word = formalBadge(r.formalType);
+      if (word && word in formal) formal[word] += 1;
+    } else {
+      const entry = TYPE_ENTRIES.find(e => e.type === r.type);
+      if (entry) type[entry.value] += 1;
+    }
+    for (const p of r.purposes || []) if (p in purpose) purpose[p] += 1;
+  }
+  return { formal, type, purpose };
+});
 
 // Both constraints apply when set: a live-typed query (substring) and the
 // selected list entries (OR-ed, result must carry at least one of them).
@@ -153,10 +232,18 @@ export const visibleResults = computed(() => {
   const formalActive  = FORMAL_ENTRIES.filter(e => store.formal[e.value]).map(e => e.value);
   const purposeActive = PURPOSE_ENTRIES.filter(e => store.purposes[e.value]).map(e => e.value);
 
+  // Time: the bounds default to the full year range of this result set;
+  // docs with no releaseYear follow the "show docs without year" checkbox.
+  const dom = yearDomain.value;
+  const yearLo = store.year.from ?? dom.min;
+  const yearHi = store.year.to ?? dom.max;
+
   return store.results.filter(r => {
     // Contributions are filtered through their FormalType badge (the 5 Doc
-    // Type entries); every other node type by its own entry. A Contribution
-    // without a recognised FormalType only survives while NOTHING is narrowed.
+    // Type entries); every other node type by its own entry — Project through
+    // the Doc Type group, Rec/Gap through "Include also". A Contribution
+    // without a recognised FormalType only survives while NOTHING is
+    // narrowed.
     let typeOk;
     if (r.type === 'Oggetto Informativo') {
       const word = formalBadge(r.formalType);
@@ -167,6 +254,12 @@ export const visibleResults = computed(() => {
     }
     if (!typeOk) return false;
     if (!passesAxis(r.purposes || [], purposeActive)) return false;
+    if (dom.min !== null) {
+      const y = yearOf(r);
+      if (y !== null) {
+        if (y < yearLo || y > yearHi) return false;
+      } else if (!store.year.showMissing) return false;
+    }
     // People and Institutions are independent axes: a result has to satisfy
     // every facet that has a query or a selection.
     return FACET_ENTRIES.every(e => facetPasses(e.key, r));

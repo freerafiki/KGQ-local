@@ -11,13 +11,14 @@ export const BADGE_CLASS = {
 
 export const BADGE_SHORT = {
   'Oggetto Informativo': 'Document',
-  'Raccomandazione':     'Rec',
+  'Raccomandazione':     'Ind',
   'Lacuna':              'Gap',
   'Progetto':            'Project',
 };
 
-// The 5 FormalType badge words = the document entries of the Doc Type filter.
-export const FORMAL_TYPES = ['Paper', 'Model', 'Plan', 'Norm', 'Dataset'];
+// The 5 FormalType badge words = the FormalType entries of the Doc Type
+// filter (Project is a plain node type and lives in state.js TYPE_ENTRIES).
+export const FORMAL_TYPES = ['Paper', 'Plan', 'Model', 'Law', 'Dataset'];
 
 // FormalType raw text ("Documento / report --> rapporti, ...") -> short badge
 // word. Only the part before "-->" is matched; '' means "no match" and the
@@ -28,7 +29,7 @@ export function formalBadge(ft) {
   if (head.includes('docum'))                             return 'Paper';
   if (head.includes('modell'))                            return 'Model';
   if (head.includes('piano') || head.includes('program')) return 'Plan';
-  if (head.includes('normativ') || head.includes('atto')) return 'Norm';
+  if (head.includes('normativ') || head.includes('atto')) return 'Law';
   if (head.includes('dataset') || head.includes('dati'))  return 'Dataset';
   return '';
 }

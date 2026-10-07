@@ -13,7 +13,7 @@
     <symbol id="ic-paper" viewBox="0 0 24 24"><path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z" /> <path d="M14 2v4a2 2 0 0 0 2 2h4" /> <path d="M10 9H8" /> <path d="M16 13H8" /> <path d="M16 17H8" /></symbol>
     <symbol id="ic-model" viewBox="0 0 24 24"><path d="M21 8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16Z" /> <path d="m3.3 7 8.7 5 8.7-5" /> <path d="M12 22V12" /></symbol>
     <symbol id="ic-plan" viewBox="0 0 24 24"><path d="M14.106 5.553a2 2 0 0 0 1.788 0l3.659-1.83A1 1 0 0 1 21 4.619v12.764a1 1 0 0 1-.553.894l-4.553 2.277a2 2 0 0 1-1.788 0l-4.212-2.106a2 2 0 0 0-1.788 0l-3.659 1.83A1 1 0 0 1 3 19.381V6.618a1 1 0 0 1 .553-.894l4.553-2.277a2 2 0 0 1 1.788 0z" /> <path d="M15 5.764v15" /> <path d="M9 3.236v15" /></symbol>
-    <symbol id="ic-norm" viewBox="0 0 24 24"><path d="m14 13-8.381 8.38a1 1 0 0 1-3.001-3l8.384-8.381" /> <path d="m16 16 6-6" /> <path d="m21.5 10.5-8-8" /> <path d="m8 8 6-6" /> <path d="m8.5 7.5 8 8" /></symbol>
+    <symbol id="ic-law" viewBox="0 0 24 24"><path d="m14 13-8.381 8.38a1 1 0 0 1-3.001-3l8.384-8.381" /> <path d="m16 16 6-6" /> <path d="m21.5 10.5-8-8" /> <path d="m8 8 6-6" /> <path d="m8.5 7.5 8 8" /></symbol>
     <symbol id="ic-dataset" viewBox="0 0 24 24"><ellipse cx="12" cy="5" rx="9" ry="3" /> <path d="M3 5V19A9 3 0 0 0 21 19V5" /> <path d="M3 12A9 3 0 0 0 21 12" /></symbol>
     <symbol id="ic-rec" viewBox="0 0 24 24"><path d="M15 14c.2-1 .7-1.7 1.5-2.5 1-.9 1.5-2.2 1.5-3.5A6 6 0 0 0 6 8c0 1 .2 2.2 1.5 3.5.7.7 1.3 1.5 1.5 2.5" /> <path d="M9 18h6" /> <path d="M10 22h4" /></symbol>
     <symbol id="ic-gap" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10" /> <path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3" /> <path d="M12 17h.01" /></symbol>
@@ -65,20 +65,59 @@
               <!-- A Contribution is filtered through its FormalType: these 5
                    entries ARE its document type (every Contribution has
                    exactly one), so one shows iff a ticked entry matches its
-                   badge. -->
-              <label class="chk" v-for="f in formalEntries" :key="f.value"><input type="checkbox" v-model="formal[f.value]"> <span class="dot" :class="f.dot"></span> {{ f.value }}</label>
-              <label class="chk" v-for="t in typeEntries" :key="t.value"><input type="checkbox" v-model="types[t.value]"> <span class="dot" :class="t.dot"></span> {{ t.label }}</label>
+                   badge. Project joins them as the 6th box: a document-ish
+                   node type of its own. The (N) after each label counts the
+                   results of THIS search carrying that entry — the whole
+                   result set, independent of the other filters. -->
+              <label class="chk" v-for="f in formalEntries" :key="f.value"><input type="checkbox" v-model="formal[f.value]"> <span class="dot" :class="f.dot"></span> {{ f.value }} ({{ counts.formal[f.value] }})</label>
+              <label class="chk" v-for="t in projectEntries" :key="t.value"><input type="checkbox" v-model="types[t.value]"> <span class="dot" :class="t.dot"></span> {{ t.label }} ({{ counts.type[t.value] }})</label>
+            </div>
+          </details>
+
+          <!-- The types that attach TO a document (Indication, Gap): opting
+               in to them is an extra, so they live apart from the document
+               types they hang on. Same `types` axis in the filter chain —
+               only the rendering and the ?include= URL param split. -->
+          <details class="filter-group">
+            <summary>Include also</summary>
+            <div class="group-body">
+              <label class="chk" v-for="t in includeEntries" :key="t.value"><input type="checkbox" v-model="types[t.value]"> <span class="dot" :class="t.dot"></span> {{ t.label }} ({{ counts.type[t.value] }})</label>
             </div>
           </details>
 
           <details class="filter-group">
-            <summary>Purpose</summary>
+            <summary>Main purpose</summary>
             <div class="group-body">
-              <!-- Second line = Purpose.name from the graph (category prefix
+              <!-- Main-purpose filter: the payload only carries MAIN purposes
+                   (query_util), so ticking here narrows by primary intent.
+                   Second line = Purpose.name from the graph (category prefix
                    stripped where the name starts with it); entries come from
                    PURPOSE_ENTRIES in js/state.js and their values MUST stay the
                    taxonomy labels from query_util.PURPOSE_CATEGORIES. -->
-              <label class="chk" v-for="p in purposeEntries" :key="p.value"><input type="checkbox" v-model="purposes[p.value]"> <span class="dot" :class="p.dot"></span><span class="chk-text">{{ p.value }}<span class="chk-desc">{{ p.desc }}</span></span></label>
+              <label class="chk" v-for="p in purposeEntries" :key="p.value"><input type="checkbox" v-model="purposes[p.value]"> <span class="dot" :class="p.dot"></span><span class="chk-text">{{ p.value }} ({{ counts.purpose[p.value] }})<span class="chk-desc">{{ p.desc }}</span></span></label>
+            </div>
+          </details>
+
+          <!-- Time: dual-bound slider over the year range of the current
+               results (hidden while no result carries a year). A bound never
+               crosses the other. Docs WITHOUT a year are governed by the
+               checkbox below the slider. The narrowed range is written to
+               ?year= (the node page's Release year link drills into it). -->
+          <details class="filter-group" v-if="yearDomain.min !== null">
+            <summary>Time</summary>
+            <div class="group-body">
+              <div class="year-readout">{{ yearFrom }} &#8211; {{ yearTo }}</div>
+              <div class="range-slider">
+                <div class="range-track"></div>
+                <div class="range-fill" :style="rangeFill"></div>
+                <input type="range" class="range-input" :min="yearDomain.min" :max="yearDomain.max" step="1"
+                       :value="yearFrom" :style="{ zIndex: yearFrom > (yearDomain.min + yearDomain.max) / 2 ? 4 : 2 }"
+                       @input="setYearFrom($event)" aria-label="Lower year bound">
+                <input type="range" class="range-input" :min="yearDomain.min" :max="yearDomain.max" step="1"
+                       :value="yearTo" style="z-index: 3"
+                       @input="setYearTo($event)" aria-label="Upper year bound">
+              </div>
+              <label class="chk"><input type="checkbox" v-model="year.showMissing"> show docs without year</label>
             </div>
           </details>
 
@@ -108,7 +147,7 @@
         <div class="meta">
           <template v-if="phase === 'done'">
             {{ searchPrefix }}<div class="meta-q">“{{ submittedQuery }}”</div>
-            <div> got {{ countText }}</div>
+            <div> showing {{ countText }}</div>
             <div> took {{ embedTime }}s to embed the query string</div>
             <div> took {{ searchTime }}s to search the VCDB</div>
           </template>
