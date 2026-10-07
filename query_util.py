@@ -59,9 +59,11 @@ _ALL_LABELS = ("Contribution", "Recommendation", "Gap", "Project")
 
 _SOURCES_BY_LABEL = {
     "Contribution": [
-        ("description_embeddings", "longQueryVector", "OI_description"),
-        ("title_embeddings", "longQueryVector", "OI_title"),
-        ("subtitle_embeddings", "longQueryVector", "OI_subtitle"),
+        # Third element = the source label: keyed into the sourceWeights dicts
+        # (query_config) by the Cypher, and echoed in `sources` on the cards.
+        ("description_embeddings", "longQueryVector", "doc_description"),
+        ("title_embeddings", "longQueryVector", "doc_title"),
+        ("subtitle_embeddings", "longQueryVector", "doc_subtitle"),
     ],
     "Recommendation": [
         ("recommendation_embeddings", "queryVector", "recommendation"),
@@ -183,6 +185,7 @@ RETURN
     oiParent.id AS parentId,
     labels(oiParent) AS parentLabels,
     elementId(oiParent) AS parentNeo4jId,
+    head([(oiParent)-[:has_formal_type]->(pft:FormalType) | properties(pft)]) AS parentFormalTypeProps,
     parentMainPurposeNames AS parentMainPurposeNames,
     parentSecPurposeNames AS parentSecPurposeNames,
     actorEntries AS actorEntries,
@@ -343,8 +346,8 @@ def _build_cypher(labels, mode="nl"):
 
 def _record_type(labels):
     # Type comes from the node label itself, so a result found ONLY via the
-    # fulltext index still gets a proper OI / Recommendation / Gap badge
-    # instead of being lumped as "fulltext".
+    # fulltext index still gets a proper Contribution / Recommendation / Gap
+    # badge instead of being lumped as "fulltext".
     if "Contribution" in labels:
         return "Oggetto Informativo"
     if "Recommendation" in labels:
@@ -442,8 +445,9 @@ def _serialize(record):
         # `officialTitle` (C2, English) and `title` (A1, Italian).
         "title": record['title'] or record['name'],
         "officialTitle": record['officialTitle'] or record['title'] or record['name'],
-        # Own purposes first, then the parent OI's (Rec/Gap inherit their OI's
-        # purposes, which is what makes purpose filtering meaningful for them).
+        # Own purposes first, then the parent document's (Rec/Gap inherit
+        # their source document's purposes, which is what makes purpose
+        # filtering meaningful for them).
         "purposes": _purpose_labels(
             record['mainPurposeNames']
             + record['secPurposeNames']
@@ -455,8 +459,8 @@ def _serialize(record):
         "people": people,
         "institutions": institutions,
         # Release year of the Contribution (the card shows it). Rec/Gap nodes
-        # carry no year of their own, so they take the parent OI's; Projects
-        # have neither -> None, and the card simply shows no year.
+        # carry no year of their own, so they take the source document's;
+        # Projects have neither -> None, and the card simply shows no year.
         "releaseYear": record['releaseYear'] or record['parentReleaseYear'],
     }
     if entry["type"] == "Oggetto Informativo":
@@ -464,8 +468,9 @@ def _serialize(record):
             "abstract": record['abstract'],
             "findings": record['findings'],
             "submission_id": record['id'],
-            # Raw FormalType text; drives the short Doc/Model/Plan/Norm/Data
-            # badge on the result card (falls back to "OI" when absent).
+            # Raw FormalType text; drives the short Paper/Model/Plan/Norm/
+            # Dataset badge on the result card (falls back to "Document"
+            # when absent).
             "formalType": _formal_type_text(record['formalTypeProps']),
         })
     elif entry["type"] == "Raccomandazione":
@@ -486,6 +491,9 @@ def _serialize(record):
             "officialTitle": record['parentOfficialTitle'] or record['parentTitle'],
             "id": record['parentId'],
             "neo4j_id": record['parentNeo4jId'],
+            # Raw FormalType of the parent: the result card labels its parent
+            # row by the document type ("Plan: ...") instead of a generic word.
+            "formalType": _formal_type_text(record['parentFormalTypeProps']),
         }
     return entry
 
@@ -604,7 +612,7 @@ def fulltext_score_bounds(results):
     return (min(ft), max(ft)) if ft else (0.0, 1.0)
 
 
-# Minimal JSON-able summary of a linked node (child/parent OI).
+# Minimal JSON-able summary of a linked node (child/parent document).
 def _make_brief(eid, props, labels, rel=None):
     props = props or {}
     return {
@@ -689,24 +697,28 @@ _RELATED_LABEL_KEYS = ("name", "title", "officialTitle", "referencePerson",
                        "acronym", "email")
 _RELATED_URL_KEYS = ("URL", "url", "uri")
 
+# Each entry carries the neighbour's elementId alongside its properties so
+# the detail page can link entities (Environment, GeographicArea, ...) to
+# their own node page: node.html?eid=...
 _RELATED_OUT = (
     "MATCH (n)-[r]->(m) WHERE elementId(n) = $eid "
     "RETURN head(labels(m)) AS lab, type(r) AS rel, "
-    "       collect(DISTINCT properties(m)) AS items"
+    "       collect(DISTINCT {eid: elementId(m), props: properties(m)}) AS items"
 )
 _RELATED_IN = (
     "MATCH (m)-[r]->(n) WHERE elementId(n) = $eid "
     "RETURN head(labels(m)) AS lab, type(r) AS rel, "
-    "       collect(DISTINCT properties(m)) AS items"
+    "       collect(DISTINCT {eid: elementId(m), props: properties(m)}) AS items"
 )
 
 
-def _related_item(props):
-    """Trim a neighbour's properties to {label, url?, props?}.
+def _related_item(entry):
+    """Trim a neighbour's {eid, props} to {eid, label, url?, props?}.
 
     Vectors and embedding status flags are dropped (they are bookkeeping,
     like the node's own `vectorProps`).
     """
+    props = entry.get("props") or {}
     clean = {}
     for k, v in (props or {}).items():
         if k.endswith("Embedding") or k.endswith("EmbeddingStatus"):
@@ -733,7 +745,7 @@ def _related_item(props):
         label = ", ".join(f"{k}: {v}" for k, v in list(clean.items())[:3])
         label_key = None
 
-    item = {"label": str(label)}
+    item = {"eid": entry.get("eid"), "label": str(label)}
     used = {label_key} if label_key else set()
 
     # Users are split over name/surname -> show them as one line.
@@ -771,8 +783,8 @@ def _fetch_related(element_id):
                 continue
             key, title = key_label
             bucket = grouped.setdefault(key, {"label": title, "items": []})
-            for props in row["items"] or []:
-                item = _related_item(props)
+            for entry in row["items"] or []:
+                item = _related_item(entry)
                 if item is not None and item not in bucket["items"]:
                     bucket["items"].append(item)
 
@@ -804,7 +816,7 @@ def _unique_actors(rows):
 
 
 def get_node_detail(element_id):
-    """Full details of a single node + its OI <-> Rec/Gap neighbourhood.
+    """Full details of a single node + its document <-> Rec/Gap neighbourhood.
 
     Returns None if the node does not exist. Used by GET /node/{eid}.
     Vector properties are summarised as their dimension (the raw 1024-float
@@ -899,7 +911,7 @@ def get_node_detail(element_id):
         entry["parents"] = [
             {**_make_brief(r["peid"], r["pprops"], r["plabels"], r["rel"]),
              "purposes": purposes.get(r["peid"], []),
-             # Parent OIs carry their FormalType too -> link-item badge.
+             # Parent documents carry their FormalType too -> link-item badge.
              "formalType": _formal_type_text(r["ftprops"])}
             for r in prows
         ]

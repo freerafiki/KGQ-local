@@ -143,7 +143,7 @@ def search(req: SearchRequest):
 @app.get("/node/{eid}")
 def node_detail(eid: str):
     """
-    Full properties of one node + its OI <-> Rec/Gap neighbourhood.
+    Full properties of one node + its document <-> Rec/Gap neighbourhood.
     This is used for discovering/exploring single results after the search
     """
     detail = query_util.get_node_detail(eid)

@@ -1,0 +1,148 @@
+/* Vue: the root template stays hidden until it is compiled and mounted
+   (same rule as app.css on index.html). */
+[v-cloak] { display: none; }
+
+:root {
+  --accent: #1a73e8;
+  --border: #dadce0;
+  --muted: #5f6368;
+  --card-border: #e1e4e8;
+  --oi: #1a73e8;
+  --rec: #188038;
+  --gap: #e37400;
+  --prj: #e91e63;
+  /* FormalType badge colors (match index.html) */
+  --paper: #c5221f;
+  --model: #00897b;
+  --plan: #1967d2;
+  --norm: #8430ce;
+  --dataset: #b06000;
+  /* Purpose tier: PASTEL chip backgrounds (dark text) — the muted
+     counterpart of index.html's purpose dots; badges keep the
+     saturated tier. */
+  --pv-val-bg: #e8f0fe;
+  --pv-mon-bg: #e6f4ea;
+  --pv-ric-bg: #feefc3;
+  --pv-pre-bg: #f3e8fd;
+  --pv-sup-bg: #e0f7fa;
+  --pv-gov-bg: #eceff1;
+  --pv-gap-bg: #fff3e0;
+  --bg: #fff;
+}
+* { box-sizing: border-box; }
+body {
+  margin: 0; font-family: Arial, Helvetica, sans-serif;
+  background: var(--bg); color: #202124;
+  padding: 20px 16px 40px;
+}
+.container { max-width: 880px; margin: 0 auto; }
+.logo { font-size: 20px; letter-spacing: -1px; margin: 0 0 16px; font-weight: 400; }
+.logo b { color: var(--accent); }
+.logo a { color: inherit; text-decoration: none; }
+.topbar { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 14px; }
+.back {
+  border: 1px solid var(--border); background: #fff; color: #202124;
+  border-radius: 8px; padding: 8px 14px; font-size: 14px; cursor: pointer;
+  text-decoration: none; display: inline-flex; align-items: center; gap: 6px;
+}
+.back:hover { background: #f1f3f4; }
+.header { display: flex; align-items: center; gap: 12px; margin-bottom: 18px; flex-wrap: wrap; }
+.badge {
+  flex-shrink: 0; display: inline-block; min-width: 56px; text-align: center;
+  font-size: 11px; font-weight: 700; letter-spacing: .4px; text-transform: uppercase;
+  color: #fff; border-radius: 12px; padding: 4px 10px;
+}
+.badge.oi { background: var(--oi); }
+.badge.rec { background: var(--rec); }
+.badge.gap { background: var(--gap); }
+.badge.prj { background: var(--prj); }
+.badge.paper { background: var(--paper); }
+.badge.model { background: var(--model); }
+.badge.plan { background: var(--plan); }
+.badge.norm { background: var(--norm); }
+.badge.dataset { background: var(--dataset); }
+.badge.ft { background: var(--muted); }
+/* The header badge is a link into the matching Doc Type facet
+   (index.html?docType=...) when the doc type is known. */
+a.badge { text-decoration: none; cursor: pointer; }
+a.badge:hover { filter: brightness(.92); }
+/* Badge icon: <use> into the inline Lucide sprite at the top of <body>;
+   stroke styling is inherited through the <use> shadow tree. Works for
+   both the header badge (white on color) and link badges (colored text). */
+.bic {
+  width: 11px; height: 11px; vertical-align: -1px; margin-right: 4px;
+  fill: none; stroke: currentColor; stroke-width: 2.2;
+  stroke-linecap: round; stroke-linejoin: round;
+}
+.name { font-size: 20px; font-weight: 600; color: var(--accent); line-height: 1.35; }
+.section {
+  border: 1px solid var(--card-border); border-radius: 10px;
+  padding: 14px 16px; margin-bottom: 16px;
+}
+.section h2 {
+  margin: 0 0 10px; font-size: 13px; font-weight: 700;
+  color: var(--muted); text-transform: uppercase; letter-spacing: .5px;
+}
+table.props { width: 100%; border-collapse: collapse; font-size: 14px; }
+table.props td { padding: 6px 8px; vertical-align: top; border-top: 1px solid var(--card-border); }
+table.props td.k {
+  width: 38%; color: var(--muted); font-size: 13px; font-weight: 600;
+}
+table.props td.v { overflow-wrap: anywhere; }
+.tags { display: flex; flex-wrap: wrap; gap: 6px; }
+.tag {
+  display: inline-block; background: #e8f0fe; color: #174ea6;
+  font-size: 12px; padding: 3px 10px; border-radius: 12px;
+}
+/* Purpose chips link into the matching Purpose facet
+   (index.html?purpose=...). */
+a.tag { text-decoration: none; }
+a.tag:hover { text-decoration: underline; }
+/* Purpose chips: pastel bg + neutral dark text (muted tier) */
+.tag.pv-val { background: var(--pv-val-bg); }
+.tag.pv-mon { background: var(--pv-mon-bg); }
+.tag.pv-ric { background: var(--pv-ric-bg); }
+.tag.pv-pre { background: var(--pv-pre-bg); }
+.tag.pv-sup { background: var(--pv-sup-bg); }
+.tag.pv-gov { background: var(--pv-gov-bg); }
+.tag.pv-gap { background: var(--pv-gap-bg); }
+.tag.pv-val, .tag.pv-mon, .tag.pv-ric, .tag.pv-pre,
+.tag.pv-sup, .tag.pv-gov, .tag.pv-gap { color: #3c4043; }
+.empty { color: var(--muted); font-size: 13px; }
+.actor-list, .link-list { list-style: none; margin: 0; padding: 0; }
+.actor-list li { font-size: 14px; padding: 4px 0; }
+/* Contributor names link to a search in Authors mode for that name. */
+.actor-list a { color: var(--accent); text-decoration: none; }
+.actor-list a:hover { text-decoration: underline; }
+.link-item {
+  display: block; border: 1px solid var(--card-border); border-radius: 8px;
+  padding: 10px 12px; margin-bottom: 8px; text-decoration: none; color: #202124;
+}
+.link-item:hover { background: #f8f9fa; border-color: var(--accent); }
+.link-item .l-badge { font-size: 11px; font-weight: 700; margin-right: 8px; }
+.l-badge.oi { color: var(--oi); } .l-badge.rec { color: var(--rec); } .l-badge.gap { color: var(--gap); } .l-badge.prj { color: var(--prj); }
+.l-badge.paper { color: var(--paper); } .l-badge.model { color: var(--model); } .l-badge.plan { color: var(--plan); }
+.l-badge.norm { color: var(--norm); } .l-badge.dataset { color: var(--dataset); }
+.link-item .l-title { font-weight: 600; color: var(--accent); }
+.link-item .l-snippet { color: var(--muted); font-size: 13px; margin-top: 4px; overflow-wrap: anywhere; }
+.link-item .l-rel { font-size: 12px; color: var(--muted); margin-top: 4px; }
+.l-rel a { color: var(--accent); text-decoration: none; }
+.l-rel a:hover { text-decoration: underline; }
+.error { color: #d93025; text-align: center; padding: 40px 0; }
+.loading { color: var(--muted); text-align: center; padding: 40px 0; }
+.sub { font-size: 13px; color: var(--muted); }
+/* Overview rows (C2/A1/A2/A3a/A3b/C3/A4/actors) reuse the props table. */
+table.props td.v .tags { margin: 0; }
+table.props td.v .actor-list { margin: 0; }
+.url-item { font-size: 14px; padding: 3px 0; overflow-wrap: anywhere; }
+.url-item a { color: var(--accent); text-decoration: none; }
+.url-item a:hover { text-decoration: underline; }
+.rel-list { list-style: none; margin: 0; padding: 0; }
+.rel-item { font-size: 14px; padding: 5px 0; border-top: 1px solid var(--card-border); }
+.rel-list .rel-item:first-child { border-top: none; padding-top: 0; }
+.rel-item a { color: var(--accent); text-decoration: none; overflow-wrap: anywhere; }
+.rel-item a:hover { text-decoration: underline; }
+.rel-extra { color: var(--muted); font-size: 12px; margin-top: 2px; overflow-wrap: anywhere; }
+details.more { margin-top: 6px; font-size: 13px; }
+details.more summary { cursor: pointer; color: var(--accent); }
+details.more .rel-list, details.more .url-item { margin-top: 6px; }

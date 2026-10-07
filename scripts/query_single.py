@@ -57,11 +57,15 @@ def main(args):
         elif record_type == "Raccomandazione":
             print(f"\tContenuto: {record['content']}\n\tMotivazione: {record['motivation']}\n\n\tdb_id={record['neo4j_id']}\n\tTrovato in {record['sources']}")
             if record.get('parent_oi'):
-                print(f"\tOI: {record['parent_oi']['title']} (db_id={record['parent_oi']['neo4j_id']})")
+                parent = record['parent_oi']
+                doc = (parent.get('formalType') or '').split('-->')[0].strip() or 'Document'
+                print(f"\tSource document [{doc}]: {parent['title']} (db_id={parent['neo4j_id']})")
         elif record_type == "Lacuna":
             print(f"\tDescrizione: {record['description']}\n\n\tdb_id={record['neo4j_id']}\n\tTrovato in {record['sources']}")
             if record.get('parent_oi'):
-                print(f"\tOI: {record['parent_oi']['title']} (db_id={record['parent_oi']['neo4j_id']})")
+                parent = record['parent_oi']
+                doc = (parent.get('formalType') or '').split('-->')[0].strip() or 'Document'
+                print(f"\tSource document [{doc}]: {parent['title']} (db_id={parent['neo4j_id']})")
         elif record_type == "Progetto":
             print(f"\t{record['title']}\n\tDescrizione: {record['description']}\n\n\tdb_id={record['neo4j_id']}, project_id={record['submission_id']}\n\tTrovato in {record['sources']}")
         else:

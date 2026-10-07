@@ -1,0 +1,246 @@
+/* Search page styles (static/index.html).
+   Shared badges/dots/chips rules are also used by node.html once that page
+   is ported to the same structure; keep page-specific rules here meanwhile. */
+
+/* Hide the whole page until Vue has compiled the inline template, otherwise
+   the v-for/v-model markup renders literally for a frame. */
+[v-cloak] { display: none; }
+
+:root {
+      --accent: #1a73e8;
+      --accent-dark: #1765cc;
+      --border: #dadce0;
+      --muted: #5f6368;
+      --bg: #fff;
+      --card-border: #e1e4e8;
+      --oi: #1a73e8;
+      --rec: #188038;
+      --gap: #e37400;
+      --prj: #e91e63;
+      /* FormalType badge colors (Doc Type filter entries) */
+      --paper: #c5221f;
+      --model: #00897b;
+      --plan: #1967d2;
+      --norm: #8430ce;
+      --dataset: #b06000;
+      /* Purpose tier: deliberately MUTED mid-tones (badges keep the
+         saturated tier) — hue kinship with the related type where natural. */
+      --pv-val: #4285f4;   /* Valutazione      - blue    */
+      --pv-mon: #34a853;   /* Monitoraggio     - green   */
+      --pv-ric: #f9ab00;   /* Ricostruzione    - amber   */
+      --pv-pre: #a142f4;   /* Previsione       - violet  */
+      --pv-sup: #12b5cb;   /* Supporto         - cyan    */
+      --pv-gov: #78909c;   /* Governance       - slate   */
+      --pv-gap: #fa7b17;   /* Gap conoscenza   - orange  */
+    }
+    * { box-sizing: border-box; }
+    html, body { height: 100%; }
+    body {
+      margin: 0;
+      font-family: Arial, Helvetica, sans-serif;
+      background: var(--bg);
+      color: #202124;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      height: 100vh;
+      overflow: hidden;
+      padding: 0 16px;
+    }
+    .container {
+      display: flex; flex-direction: column;
+      width: 100%; max-width: 1000px; height: 100%;
+      margin: 0 auto;
+    }
+    .logo { text-align: center; font-size: 28px; letter-spacing: -1px; margin: 18px 0 14px; font-weight: 400; flex: 0 0 auto; }
+    .logo b { color: var(--accent); }
+    .logo .tag { font-size: 14px; font-weight: 400; letter-spacing: 0; color: var(--muted); margin-left: 4px; }
+    /* Mode switcher: a pill row between the logo and the search bar. The track
+       is light gray, the selected tab a white "chip" with a soft shadow — the
+       same interaction as DeepL's switcher, in this page's palette.
+       flex: 0 0 auto is deliberate: a scroll container has an automatic
+       minimum size of 0, so without it this row is the element that gets
+       squashed when the column above/below runs out of room. */
+    .mode-tabs {
+      display: flex; justify-content: center; align-items: center; gap: 4px;
+      flex: 0 0 auto;
+      width: fit-content; max-width: 100%; margin: -4px auto 12px;
+      padding: 4px; background: #f1f3f4; border: 1px solid var(--border);
+      border-radius: 999px; overflow-x: auto; scrollbar-width: none;
+    }
+    .mode-tabs::-webkit-scrollbar { display: none; }
+    .mode-tabs .mode-tab {
+      appearance: none; -webkit-appearance: none;
+      border: 0; background: transparent; cursor: pointer;
+      font: inherit; font-size: 13px; font-weight: 600; line-height: 1.3;
+      color: var(--muted); padding: 7px 14px; border-radius: 999px;
+      white-space: nowrap; transition: background-color .15s, color .15s, box-shadow .15s;
+    }
+    .mode-tabs .mode-tab:hover { background: #fff; color: #202124; }
+    .mode-tabs .mode-tab[aria-selected='true'] {
+      background: #fff; color: var(--accent);
+      box-shadow: 0 1px 2px rgba(60, 64, 67, .3);
+    }
+    .mode-tabs .mode-tab:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+    .searchbar {
+      display: flex; align-items: center; gap: 8px;
+      border: 1px solid var(--border); border-radius: 24px;
+      padding: 12px 18px; box-shadow: none; transition: box-shadow .2s, border-color .2s;
+    }
+    .searchbar:focus-within { box-shadow: 0 1px 6px rgba(32,33,36,.28); border-color: transparent; }
+    .searchbar input {
+      flex: 1; border: none; outline: none; font-size: 18px; background: transparent; min-width: 0;
+    }
+    .searchbar svg { fill: var(--accent); flex-shrink: 0; }
+    .btn {
+      border: none; border-radius: 6px; padding: 10px 20px; font-size: 14px; cursor: pointer;
+    }
+    .btn-primary { background: var(--accent); color: #fff; }
+    .btn-primary:hover { background: var(--accent-dark); }
+    .btn-primary:disabled { background: #a8c7fa; cursor: default; }
+    /* flex-basis 0, not auto: the columns' CONTENT height must not take part
+       in sizing this row. With basis auto a tall result list makes the row's
+       hypothetical height exceed the viewport, flex shrink kicks in and
+       squeezes the siblings (first of all the mode tab row) — the two columns
+       scroll internally instead, which is what the overflow rules below do. */
+    .layout { flex: 1 1 0; min-height: 0; display: flex; gap: 28px; margin-top: 24px; padding: 0 0 16px; }
+    .col-filters { flex: 0 0 24%; min-width: 0; overflow-y: auto; overscroll-behavior: contain; padding-right: 4px; }
+    .col-results { flex: 1 1 auto; min-width: 0; overflow-y: auto; }
+    .panel-title { margin: 0 2px 4px; font-size: 16px; font-weight: 700; }
+    .section-title { margin: 0 0 4px; font-size: 16px; font-weight: 700; }
+    .small-title { font-size: 12px;}
+    .filter-panel {
+      padding: 12px 14px 6px; border: 1px solid var(--card-border); border-radius: 10px;
+    }
+    .filter-group { border-top: 1px solid var(--card-border); }
+    .filter-group summary {
+      list-style: none; cursor: pointer; user-select: none;
+      font-size: 13px; color: var(--muted); text-transform: uppercase; letter-spacing: .5px; font-weight: 700;
+      padding: 10px 0; display: flex; justify-content: space-between; align-items: center;
+    }
+    .filter-group summary::-webkit-details-marker { display: none; }
+    .filter-group summary::after { content: "\25B6"; font-size: 10px; transition: transform .2s; }
+    .filter-group[open] summary::after { transform: rotate(90deg); }
+    .group-body { padding: 2px 0 12px; }
+    .adv-body label { display: flex; flex-direction: column; font-size: 13px; color: var(--muted); margin-bottom: 8px; }
+    .adv-body input { margin-top: 4px; width: 110px; padding: 6px; border: 1px solid var(--border); border-radius: 6px; font-size: 14px; }
+    .actor-input { width: 100%; padding: 7px 10px; border: 1px solid var(--border); border-radius: 6px; font-size: 14px; }
+    .actor-input::placeholder { color: #9aa0a6; }
+    .actor-list { max-height: 160px; overflow-y: auto; border: 1px solid var(--border); border-radius: 6px; margin-top: 8px; }
+    .actor-item { display: flex; align-items: center; gap: 8px; padding: 6px 10px; font-size: 13px; cursor: pointer; }
+    .actor-item:hover { background: #f1f3f4; }
+    .actor-item input { accent-color: var(--accent); cursor: pointer; }
+    .actor-empty { padding: 8px 10px; font-size: 13px; color: var(--muted); }
+    .actor-chips { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+    .chip { display: inline-flex; align-items: center; gap: 6px; background: #e8f0fe; color: #174ea6; font-size: 12px; padding: 3px 8px; border-radius: 12px; }
+    .chip button { background: none; border: none; cursor: pointer; color: #174ea6; font-size: 13px; line-height: 1; padding: 0; }
+    .chk {
+      display: flex; align-items: center; gap: 10px; font-size: 15px; cursor: pointer;
+      padding: 7px 0; color: #202124;
+    }
+    .chk input { width: 16px; height: 16px; accent-color: var(--accent); cursor: pointer; }
+    /* Two-line filter label: category + smaller description line */
+    .chk-text { display: flex; flex-direction: column; line-height: 1.3; }
+    .chk-desc { font-size: 11.5px; font-weight: 400; color: var(--muted); }
+    .dot { width: 12px; height: 12px; border-radius: 50%; flex-shrink: 0; display: inline-block; }
+    .dot.oi { background: var(--oi); }
+    .dot.rec { background: var(--rec); }
+    .dot.gap { background: var(--gap); }
+    .dot.prj { background: var(--prj); }
+    .dot.paper { background: var(--paper); }
+    .dot.model { background: var(--model); }
+    .dot.plan { background: var(--plan); }
+    .dot.norm { background: var(--norm); }
+    .dot.dataset { background: var(--dataset); }
+    .dot.pv-val { background: var(--pv-val); }
+    .dot.pv-mon { background: var(--pv-mon); }
+    .dot.pv-ric { background: var(--pv-ric); }
+    .dot.pv-pre { background: var(--pv-pre); }
+    .dot.pv-sup { background: var(--pv-sup); }
+    .dot.pv-gov { background: var(--pv-gov); }
+    .dot.pv-gap { background: var(--pv-gap); }
+    /* Search summary, shown under the Filters card in the left column:
+       one fact per line. The separator belongs to the title so the whole
+       block (title + lines + footer) reads as one section. */
+    .col-filters .section-title {
+      margin-top: 14px; padding-top: 10px;
+      border-top: 1px solid var(--card-border);
+    }
+    .meta { color: var(--muted); font-size: 13px; }
+    .meta > div { margin-top: 3px; }
+    .meta .meta-q {
+      color: #202124; font-weight: 600; font-size: 13.5px;
+      overflow-wrap: anywhere; margin-top: 0;
+    }
+    .results { margin-top: 4px; }
+    .card {
+      border: 1px solid var(--card-border); border-radius: 10px; padding: 16px; margin-bottom: 14px;
+      cursor: pointer; transition: border-color .15s, box-shadow .15s;
+    }
+    .card:hover { border-color: var(--accent); box-shadow: 0 1px 5px rgba(32,33,36,.12); }
+    .card:active { border-color: var(--accent-dark); }
+    .card-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 10px; }
+    .name { font-size: 17px; font-weight: 600; color: var(--accent); flex: 1; min-width: 0; }
+    .badge {
+      box-sizing: border-box; flex-shrink: 0; display: inline-block;
+      /* Fixed width so every card's badge aligns in one vertical column,
+         whatever the label (DATASET/PROJECT are the longest + icon). */
+      width: 94px; white-space: nowrap;
+      text-align: center;
+      font-size: 11px; font-weight: 700; letter-spacing: .4px; text-transform: uppercase;
+      color: #fff; border-radius: 12px; padding: 3px 10px;
+    }
+    .badge.oi { background: var(--oi); }
+    .badge.rec { background: var(--rec); }
+    .badge.gap { background: var(--gap); }
+    .badge.prj { background: var(--prj); }
+    .badge.paper { background: var(--paper); }
+    .badge.model { background: var(--model); }
+    .badge.plan { background: var(--plan); }
+    .badge.norm { background: var(--norm); }
+    .badge.dataset { background: var(--dataset); }
+    .badge.ft { background: var(--muted); }
+    /* Badge icon: <use> into the inline Lucide sprite at the top of <body>.
+       Inherited properties pass through the <use> shadow tree, so the stroke
+       styling lives here rather than in each <symbol>. */
+    .bic {
+      width: 11px; height: 11px; vertical-align: -1px; margin-right: 4px;
+      fill: none; stroke: currentColor; stroke-width: 2.2;
+      stroke-linecap: round; stroke-linejoin: round;
+    }
+    .preview {
+      color: #3c4043; font-size: 14px; line-height: 1.5; margin: 0 0 10px;
+      display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden;
+    }
+    .preview:empty { display: none; }
+    .full { display: none; margin-bottom: 10px; }
+    .full .field { color: #3c4043; font-size: 14px; line-height: 1.55; margin-bottom: 8px; }
+    .full .flabel { font-weight: 700; color: #202124; }
+    .card.open .full { display: block; }
+    .card.open .preview { display: none; }
+    .toggle {
+      background: none; border: none; color: var(--accent); cursor: pointer;
+      font-size: 14px; padding: 0; margin-bottom: 10px;
+    }
+    .toggle:hover { text-decoration: underline; }
+    .scores { font-size: 13px; color: var(--muted); background: #f8f9fa; border-radius: 6px; padding: 6px 10px; overflow-wrap: anywhere; }
+    .scores b { color: #202124; }
+    /* Reference person + year, squeezed between "Show more" and the scores. */
+    .card-meta { font-size: 13px; color: var(--muted); margin-bottom: 8px; overflow-wrap: anywhere; }
+    .card-meta .mlabel { color: #202124; font-weight: 700; }
+    .card-meta .msep { margin: 0 8px; }
+    .parent-row { font-size: 13px; color: var(--muted); margin-top: 8px; }
+    .parent-row .plabel { color: #202124; font-weight: 700; }
+    /* Rec/Gap children of a document that is itself in the results: indented
+       on a left rule under that parent card instead of top-level cards. The
+       negative top margin pulls the rule up into the parent card's bottom
+       margin, so parent + children read as one block; the bottom margin keeps
+       the usual card rhythm towards the next top-level card. */
+    .child-group { margin: -6px 0 14px 26px; padding-left: 16px; border-left: 2px solid var(--border); }
+    .child-group .card { margin-bottom: 10px; }
+    .child-group .card:last-child { margin-bottom: 0; }
+    .empty, .error, .loading { color: var(--muted); text-align: center; padding: 24px 0; }
+    .error { color: #d93025; }
+    footer { margin: 40px 0 20px; font-size: 12px; color: #9aa0a6; }
+    /* Footer now sits in the left column, right under the summary lines. */
+    .col-filters footer { margin: 14px 0 4px; }

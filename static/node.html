@@ -4,139 +4,8 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Node details · KGQ Search</title>
-  <style>
-    :root {
-      --accent: #1a73e8;
-      --border: #dadce0;
-      --muted: #5f6368;
-      --card-border: #e1e4e8;
-      --oi: #1a73e8;
-      --rec: #188038;
-      --gap: #e37400;
-      --prj: #e91e63;
-      /* FormalType badge colors (match index.html) */
-      --paper: #c5221f;
-      --model: #00897b;
-      --plan: #1967d2;
-      --norm: #8430ce;
-      --dataset: #b06000;
-      /* Purpose tier: PASTEL chip backgrounds (dark text) — the muted
-         counterpart of index.html's purpose dots; badges keep the
-         saturated tier. */
-      --pv-val-bg: #e8f0fe;
-      --pv-mon-bg: #e6f4ea;
-      --pv-ric-bg: #feefc3;
-      --pv-pre-bg: #f3e8fd;
-      --pv-sup-bg: #e0f7fa;
-      --pv-gov-bg: #eceff1;
-      --pv-gap-bg: #fff3e0;
-      --bg: #fff;
-    }
-    * { box-sizing: border-box; }
-    body {
-      margin: 0; font-family: Arial, Helvetica, sans-serif;
-      background: var(--bg); color: #202124;
-      padding: 20px 16px 40px;
-    }
-    .container { max-width: 880px; margin: 0 auto; }
-    .logo { font-size: 20px; letter-spacing: -1px; margin: 0 0 16px; font-weight: 400; }
-    .logo b { color: var(--accent); }
-    .logo a { color: inherit; text-decoration: none; }
-    .topbar { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 14px; }
-    .back {
-      border: 1px solid var(--border); background: #fff; color: #202124;
-      border-radius: 8px; padding: 8px 14px; font-size: 14px; cursor: pointer;
-      text-decoration: none; display: inline-flex; align-items: center; gap: 6px;
-    }
-    .back:hover { background: #f1f3f4; }
-    .header { display: flex; align-items: center; gap: 12px; margin-bottom: 18px; flex-wrap: wrap; }
-    .badge {
-      flex-shrink: 0; display: inline-block; min-width: 56px; text-align: center;
-      font-size: 11px; font-weight: 700; letter-spacing: .4px; text-transform: uppercase;
-      color: #fff; border-radius: 12px; padding: 4px 10px;
-    }
-    .badge.oi { background: var(--oi); }
-    .badge.rec { background: var(--rec); }
-    .badge.gap { background: var(--gap); }
-    .badge.prj { background: var(--prj); }
-    .badge.paper { background: var(--paper); }
-    .badge.model { background: var(--model); }
-    .badge.plan { background: var(--plan); }
-    .badge.norm { background: var(--norm); }
-    .badge.dataset { background: var(--dataset); }
-    .badge.ft { background: var(--muted); }
-    /* Badge icon: <use> into the inline Lucide sprite at the top of <body>;
-       stroke styling is inherited through the <use> shadow tree. Works for
-       both the header badge (white on color) and link badges (colored text). */
-    .bic {
-      width: 11px; height: 11px; vertical-align: -1px; margin-right: 4px;
-      fill: none; stroke: currentColor; stroke-width: 2.2;
-      stroke-linecap: round; stroke-linejoin: round;
-    }
-    .name { font-size: 20px; font-weight: 600; color: var(--accent); line-height: 1.35; }
-    .section {
-      border: 1px solid var(--card-border); border-radius: 10px;
-      padding: 14px 16px; margin-bottom: 16px;
-    }
-    .section h2 {
-      margin: 0 0 10px; font-size: 13px; font-weight: 700;
-      color: var(--muted); text-transform: uppercase; letter-spacing: .5px;
-    }
-    table.props { width: 100%; border-collapse: collapse; font-size: 14px; }
-    table.props td { padding: 6px 8px; vertical-align: top; border-top: 1px solid var(--card-border); }
-    table.props td.k {
-      width: 38%; color: var(--muted); font-size: 13px; font-weight: 600;
-    }
-    table.props td.v { overflow-wrap: anywhere; }
-    .tags { display: flex; flex-wrap: wrap; gap: 6px; }
-    .tag {
-      display: inline-block; background: #e8f0fe; color: #174ea6;
-      font-size: 12px; padding: 3px 10px; border-radius: 12px;
-    }
-    /* Purpose chips: pastel bg + neutral dark text (muted tier) */
-    .tag.pv-val { background: var(--pv-val-bg); }
-    .tag.pv-mon { background: var(--pv-mon-bg); }
-    .tag.pv-ric { background: var(--pv-ric-bg); }
-    .tag.pv-pre { background: var(--pv-pre-bg); }
-    .tag.pv-sup { background: var(--pv-sup-bg); }
-    .tag.pv-gov { background: var(--pv-gov-bg); }
-    .tag.pv-gap { background: var(--pv-gap-bg); }
-    .tag.pv-val, .tag.pv-mon, .tag.pv-ric, .tag.pv-pre,
-    .tag.pv-sup, .tag.pv-gov, .tag.pv-gap { color: #3c4043; }
-    .empty { color: var(--muted); font-size: 13px; }
-    .actor-list, .link-list { list-style: none; margin: 0; padding: 0; }
-    .actor-list li { font-size: 14px; padding: 4px 0; }
-    .link-item {
-      display: block; border: 1px solid var(--card-border); border-radius: 8px;
-      padding: 10px 12px; margin-bottom: 8px; text-decoration: none; color: #202124;
-    }
-    .link-item:hover { background: #f8f9fa; border-color: var(--accent); }
-    .link-item .l-badge { font-size: 11px; font-weight: 700; margin-right: 8px; }
-    .l-badge.oi { color: var(--oi); } .l-badge.rec { color: var(--rec); } .l-badge.gap { color: var(--gap); } .l-badge.prj { color: var(--prj); }
-    .l-badge.paper { color: var(--paper); } .l-badge.model { color: var(--model); } .l-badge.plan { color: var(--plan); }
-    .l-badge.norm { color: var(--norm); } .l-badge.dataset { color: var(--dataset); }
-    .link-item .l-title { font-weight: 600; color: var(--accent); }
-    .link-item .l-snippet { color: var(--muted); font-size: 13px; margin-top: 4px; overflow-wrap: anywhere; }
-    .link-item .l-rel { font-size: 12px; color: var(--muted); margin-top: 4px; }
-    .error { color: #d93025; text-align: center; padding: 40px 0; }
-    .loading { color: var(--muted); text-align: center; padding: 40px 0; }
-    .sub { font-size: 13px; color: var(--muted); }
-    /* Overview rows (C2/A1/A2/A3a/A3b/C3/A4/actors) reuse the props table. */
-    table.props td.v .tags { margin: 0; }
-    table.props td.v .actor-list { margin: 0; }
-    .url-item { font-size: 14px; padding: 3px 0; overflow-wrap: anywhere; }
-    .url-item a { color: var(--accent); text-decoration: none; }
-    .url-item a:hover { text-decoration: underline; }
-    .rel-list { list-style: none; margin: 0; padding: 0; }
-    .rel-item { font-size: 14px; padding: 5px 0; border-top: 1px solid var(--card-border); }
-    .rel-list .rel-item:first-child { border-top: none; padding-top: 0; }
-    .rel-item a { color: var(--accent); text-decoration: none; overflow-wrap: anywhere; }
-    .rel-item a:hover { text-decoration: underline; }
-    .rel-extra { color: var(--muted); font-size: 12px; margin-top: 2px; overflow-wrap: anywhere; }
-    details.more { margin-top: 6px; font-size: 13px; }
-    details.more summary { cursor: pointer; color: var(--accent); }
-    details.more .rel-list, details.more .url-item { margin-top: 6px; }
-  </style>
+  <!-- Page styles live next to the markup (like app.css on index.html). -->
+  <link rel="stylesheet" href="node.css">
 </head>
 <body>
   <!-- Inline icon sprite: Icons: lucide-static v0.544.0 (ISC License) -->
@@ -152,423 +21,129 @@
     <symbol id="ic-oi" viewBox="0 0 24 24"><path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z" /> <path d="M14 2v4a2 2 0 0 0 2 2h4" /></symbol>
     <symbol id="ic-ft" viewBox="0 0 24 24"><path d="m21 21-4.34-4.34" /> <circle cx="11" cy="11" r="8" /></symbol>
   </svg>
-  <div class="container">
+
+  <!-- #app is the Vue mount point (see js/node-page.js).
+       The markup below is the ROOT COMPONENT'S TEMPLATE: Vue compiles it at
+       mount, so the dynamic parts carry v-* directives instead of being
+       written by hand in JS. Repeated pieces (linked-node cards, related
+       lists, URL rows) are child components; everything else is plain static
+       markup. The page's view model — field order, limits, link targets —
+       lives in js/node-page.js.
+       No build step: Vue is vendored in static/vendor/ and imported as an ES
+       module, so the page is still served as static files. -->
+  <div class="container" id="app" v-cloak>
     <div class="topbar">
-      <button class="back" id="back-btn">&larr; Back</button>
+      <button class="back" type="button" @click="goBack">&larr; Back</button>
       <div class="logo"><a href="index.html"><b>VCDB</b> Search</a></div>
     </div>
-    <div id="content"><div class="loading">Loading&hellip;</div></div>
+
+    <div v-if="phase === 'loading'" class="loading">Loading&hellip;</div>
+    <div v-else-if="phase === 'error'" class="error">{{ error }}</div>
+    <template v-else>
+      <!-- Badge = the node's document type; when known, it drills into the
+           matching Doc Type filter on the search page. -->
+      <div class="header">
+        <a v-if="header.badgeHref" class="badge" :class="header.badgeClass" :href="header.badgeHref">
+          <svg class="bic" aria-hidden="true"><use :href="'#ic-' + header.badgeClass"></use></svg>{{ header.badgeText }}
+        </a>
+        <span v-else class="badge" :class="header.badgeClass">
+          <svg class="bic" aria-hidden="true"><use :href="'#ic-' + header.badgeClass"></use></svg>{{ header.badgeText }}
+        </span>
+        <span class="name">{{ header.name }}</span>
+      </div>
+
+      <!-- 1. Details: overview fields in the requested order, then C3
+           URL/DOI, purposes and contributors. Purpose chips link to the
+           Purpose facet, contributor names to an Authors-mode search. -->
+      <div v-if="detailsRows.length" class="section">
+        <h2>Details</h2>
+        <table class="props">
+          <tr v-for="row in detailsRows" :key="row.label">
+            <td class="k">{{ row.label }}</td>
+            <td class="v">
+              <template v-if="row.kind === 'text'">{{ row.value }}</template>
+              <div v-else-if="row.kind === 'tags'" class="tags">
+                <a v-for="t in row.items" :key="t.label" class="tag" :class="t.cls" :href="t.href">{{ t.label }}</a>
+              </div>
+              <ul v-else-if="row.kind === 'actors'" class="actor-list">
+                <li v-for="a in row.items" :key="a.name">
+                  <a v-if="a.href" :href="a.href">{{ a.name }}</a><template v-else>{{ a.name }}</template>
+                </li>
+              </ul>
+              <template v-else-if="row.kind === 'urls'">
+                <url-item v-for="(u, i) in row.items" :key="i" :item="u"></url-item>
+                <details v-if="row.more.length" class="more">
+                  <summary>Show {{ row.more.length }} more</summary>
+                  <url-item v-for="(u, i) in row.more" :key="i" :item="u"></url-item>
+                </details>
+              </template>
+            </td>
+          </tr>
+        </table>
+      </div>
+
+      <!-- 2. Related groups (Environment, Geographic area, Formal type, ...),
+           in the backend's display order. Entities link to their node page;
+           external documents open in a new tab; the Formal type section
+           drills into the Doc Type facet. -->
+      <div v-for="s in relatedSections" :key="s.key" class="section">
+        <h2>{{ s.title }}</h2>
+        <rel-list :items="s.items"></rel-list>
+        <details v-if="s.more.length" class="more">
+          <summary>Show {{ s.more.length }} more</summary>
+          <rel-list :items="s.more"></rel-list>
+        </details>
+      </div>
+
+      <!-- 3. Linked node cards: parent document, connected Recs/Gaps. -->
+      <div v-for="s in linkSections" :key="s.key" class="section">
+        <h2>{{ s.title }}</h2>
+        <link-card v-for="(item, i) in s.items" :key="item.href + i" :item="item"></link-card>
+        <div v-if="s.empty" class="empty">{{ s.empty }}</div>
+      </div>
+
+      <!-- 4. Remaining own fields, below the connected Recs/Gaps. -->
+      <div v-if="extraRows.length" class="section">
+        <h2>Additional Properties</h2>
+        <table class="props">
+          <tr v-for="row in extraRows" :key="row.label">
+            <td class="k">{{ row.label }}</td>
+            <td class="v">{{ row.value }}</td>
+          </tr>
+        </table>
+      </div>
+      <div v-else-if="!detailsRows.length" class="section">
+        <div class="empty">No stored properties.</div>
+      </div>
+
+      <!-- 5. Assisted by / Reviewed by, at the very bottom of the page. -->
+      <div class="section">
+        <h2>Assisted by / Reviewed by</h2>
+        <table class="props">
+          <tr>
+            <td class="k">Assisted by</td>
+            <td class="v">
+              <template v-if="assisted.items.length || assisted.more.length">
+                <rel-list :items="assisted.items"></rel-list>
+                <details v-if="assisted.more.length" class="more">
+                  <summary>Show {{ assisted.more.length }} more</summary>
+                  <rel-list :items="assisted.more"></rel-list>
+                </details>
+              </template>
+              <span v-else class="sub">Nobody recorded yet.</span>
+            </td>
+          </tr>
+          <tr>
+            <td class="k">Reviewed by</td>
+            <td class="v"><span class="sub">No reviewer recorded yet.</span></td>
+          </tr>
+        </table>
+      </div>
+
+      <div class="sub">db_id: {{ data.eid }}</div>
+    </template>
   </div>
 
-  <script>
-    // Same rule as index.html: dev static server (28080) hits :28000
-    // directly, any other origin goes same-origin through the reverse proxy.
-    const API_BASE = (location.port === '28080')
-      ? location.protocol + '//' + location.hostname + ':28000'
-      : '';
-    const BADGE_CLASS = { 'Oggetto Informativo': 'oi', 'Raccomandazione': 'rec', 'Lacuna': 'gap', 'Progetto': 'prj', 'Full-text': 'ft' };
-    // Purpose taxonomy label -> pastel chip class (colors defined in :root;
-    // labels come from query_util.PURPOSE_CATEGORIES).
-    const PURPOSE_CLASS = {
-      'Valutazione':        'pv-val',
-      'Monitoraggio':       'pv-mon',
-      'Ricostruzione':      'pv-ric',
-      'Previsione':         'pv-pre',
-      'Supporto decisioni': 'pv-sup',
-      'Governance':         'pv-gov',
-      'Gap di conoscenza':  'pv-gap',
-    };
-    const BADGE_SHORT = { 'Oggetto Informativo': 'OI', 'Raccomandazione': 'Rec', 'Lacuna': 'Gap', 'Progetto': 'Project', 'Full-text': 'FT' };
-    // FormalType raw text ("Documento / report --> rapporti, ...") -> short
-    // badge word. Only the part before "-->" is matched; '' means "no match"
-    // and the caller keeps the generic "OI" badge.
-    // <svg><use> into the inline sprite at the top of <body> (Lucide, ISC).
-    // cls = badge CSS class (paper/model/plan/norm/dataset/rec/gap/prj/oi/ft).
-    function badgeIcon(cls) {
-      return '<svg class="bic" aria-hidden="true"><use href="#ic-' + cls + '"></use></svg>';
-    }
-
-    function formalBadge(ft) {
-      if (!ft) return '';
-      const head = String(ft).split('-->')[0].toLowerCase();
-      if (head.includes('docum'))                             return 'Paper';
-      if (head.includes('modell'))                            return 'Model';
-      if (head.includes('piano') || head.includes('program')) return 'Plan';
-      if (head.includes('normativ') || head.includes('atto')) return 'Norm';
-      if (head.includes('dataset') || head.includes('dati'))  return 'Dataset';
-      return '';
-    }
-
-    const PROP_LABELS = {
-      officialTitle: 'Official Title',
-      title: 'Title',
-      subtitle: 'Subtitle',
-      description: 'Description',
-      findings: 'Findings',
-      content: 'Content',
-      motivation: 'Motivation',
-      name: 'Name',
-      id_num: 'Project ID',
-      funding_source: 'Funding source',
-      output_types: 'Output types',
-      start_year: 'Start year',
-      end_year: 'End year',
-      start_month: 'Start month',
-      end_month: 'End month',
-      notes: 'Notes',
-      decision_type: 'Decision type',
-      conditions: 'Conditions',
-      knowledge: 'Knowledge',
-      policy: 'Policy',
-      id: 'ID',
-      releaseYear: 'Release year',
-      releaseDate: 'Release date',
-      grant: 'Grant',
-      version: 'Version',
-      versionDetails: 'Version details',
-      submitted: 'Submitted',
-      dateType: 'Date type',
-      temporalType: 'Temporal type',
-      temporalReference: 'Temporal reference',
-      temporalResolution_0: 'Temporal resolution',
-      spatial_type: 'Spatial type',
-      spatial_scale: 'Spatial scale',
-      spatial_resolution: 'Spatial resolution',
-      coveredAreaDescription: 'Covered area',
-      discrete_spatial_type: 'Discrete spatial type',
-      discrete_points_insertion_mode: 'Discrete points insertion',
-      validityPeriod: 'Validity period',
-      forDecision: 'For decision',
-      forRecommendation: 'For recommendation',
-      expert_evaluation: 'Expert evaluation',
-      internal_note: 'Internal note',
-      internal_record_state: 'Internal record state',
-      note: 'Note',
-      future_work: 'Future work',
-      intervals_year_month_1: 'Time intervals',
-      // Related-node fields (they arrive in `related`, not in `properties`)
-      URL: 'URL',
-      url: 'URL',
-      physicalArchive: 'Physical archive',
-      email: 'Email',
-      institution: 'Institution',
-      surname: 'Surname',
-      referencePerson: 'Reference person',
-      acronym: 'Acronym',
-      type: 'Type',
-      action: 'Action',
-      example: 'Example',
-      full_text: 'Full text',
-      details: 'Details',
-      other_name: 'Other name',
-    };
-
-    const eid = new URLSearchParams(location.search).get('eid');
-
-    document.getElementById('back-btn').addEventListener('click', goBack);
-    document.addEventListener('keydown', (e) => {
-      if (e.key === 'Escape') goBack();
-    });
-
-    function goBack() {
-      if (history.length > 1) history.back();
-      else location.href = 'index.html';
-    }
-
-    function esc(s) {
-      return String(s == null ? '' : s).replace(/[&<>"']/g, c => ({
-        '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;',
-      }[c]));
-    }
-
-    function formatValue(v) {
-      if (Array.isArray(v)) return esc(v.join(', '));
-      if (v && typeof v === 'object') return esc(JSON.stringify(v));
-      return esc(String(v == null ? '' : v));
-    }
-
-    function link(brief) {
-      const label = brief.purposes && brief.purposes.length ? brief.purposes.join(', ') : '';
-      const snippet = brief.title || brief.content || brief.description || 'No text';
-      const briefWord = brief.type === 'Oggetto Informativo' ? formalBadge(brief.formalType) : '';
-      const briefBadge = briefWord || (BADGE_SHORT[brief.type] || 'FT');
-      const briefClass = briefWord ? briefWord.toLowerCase()
-                                   : (BADGE_CLASS[brief.type] || 'ft');
-      return '<a class="link-item" href="node.html?eid=' + encodeURIComponent(brief.eid) + '">' +
-        '<span class="l-badge ' + briefClass + '">' + badgeIcon(briefClass) + esc(briefBadge) + '</span>' +
-        '<span class="l-title">' + esc(brief.title || brief.content || brief.description || 'Node') + '</span>' +
-        '<div class="l-snippet">' + esc(truncate(snippet, 180)) + '</div>' +
-        (brief.rel ? '<div class="l-rel">Linked via ' + esc(brief.rel) + '</div>' : '') +
-        (label ? '<div class="l-rel">Purpose: ' + esc(label) + '</div>' : '') +
-        '</a>';
-    }
-
-    function truncate(s, n) {
-      s = String(s == null ? '' : s);
-      return s.length > n ? s.slice(0, n - 1) + '\u2026' : s;
-    }
-
-    async function load() {
-      const content = document.getElementById('content');
-      if (!eid) {
-        content.innerHTML = '<div class="error">Missing node id (eid query param).</div>';
-        return;
-      }
-      try {
-        const res = await fetch(API_BASE + '/node/' + encodeURIComponent(eid));
-        if (res.status === 404) throw new Error('Node not found');
-        if (!res.ok) throw new Error('HTTP ' + res.status);
-        const d = await res.json();
-        render(d);
-      } catch (err) {
-        content.innerHTML = '<div class="error">Failed to load node: ' + esc(String(err.message || err)) + '</div>';
-      }
-    }
-
-    // Field order for the detail page: C2 title, A1 (Italian), A2 subtitle,
-    // A3a abstract, A3b findings, grant, validity period, C3 URL/DOI, A4 main
-    // purpose, secondary purpose, contributors split into people /
-    // institutions - and only then everything else. The remaining own fields
-    // render as "Additional Properties" below the connected Recs/Gaps, just
-    // above "Assisted by / Reviewed by" and the embedding status.
-    const OVERVIEW_URL_LIMIT = 10;
-    const REL_LIST_LIMIT = 12;
-
-    function render(d) {
-      const props = d.properties || {};
-      const related = d.related || {};
-      const isOI = (d.labels || []).includes('Contribution');
-      const nodeName = nameOf(d);
-      document.title = truncate(nodeName, 120) + ' \u00B7 KGQ Search';
-
-      let html = '';
-      // OI header badge = its FormalType short word (Paper/Model/Plan/Norm/
-      // Dataset) with the FormalType color, falling back to the raw related
-      // section (older payloads) and to a plain blue "OI".
-      const ftRaw = d.formalType
-        || ((related.formalType && related.formalType.items
-             && related.formalType.items[0]) ? related.formalType.items[0].label : '')
-        || '';
-      const oiWord = d.type === 'Oggetto Informativo' ? formalBadge(ftRaw) : '';
-      const badgeClass = oiWord ? oiWord.toLowerCase()
-                                : (BADGE_CLASS[d.type] || 'ft');
-      const headerBadge = oiWord || (BADGE_SHORT[d.type] || 'FT');
-      html += '<div class="header">' +
-        '<span class="badge ' + badgeClass + '">' + badgeIcon(badgeClass) + esc(headerBadge) + '</span>' +
-        '<span class="name">' + esc(nodeName) + '</span>' +
-        '</div>';
-
-      // ---- 1. Overview, in the requested order ----------------------
-      const overviewFields = [
-        ['officialTitle', 'Official title (C2)'],
-        ['title',         'Title (A1) \u00B7 Italian'],
-        ['name',          'Name'],
-        ['subtitle',      'Subtitle (A2)'],
-        ['description',   isOI ? 'Abstract (A3a)' : 'Description'],
-        ['findings',      'Findings (A3b)'],
-        ['content',       'Content'],
-        ['grant',         'Grant'],
-        ['validityPeriod','Validity period'],
-      ];
-      const overviewKeys = new Set(overviewFields.map(([k]) => k));
-      const overviewRows = [];
-      overviewFields.forEach(([k, label]) => {
-        const v = props[k];
-        if (v == null || (typeof v === 'string' && !v.trim())) return;
-        overviewRows.push('<tr><td class="k">' + esc(label) +
-          '</td><td class="v">' + formatValue(v) + '</td></tr>');
-      });
-
-      // C3 URL/DOI: relationship-linked Reference nodes (not a property).
-      const refs = (related.references && related.references.items) || [];
-      if (refs.length) {
-        overviewRows.push('<tr><td class="k">URL/DOI (C3)</td><td class="v">' +
-          urlList(refs) + '</td></tr>');
-      }
-
-      // A4 main purpose (has_main_function) + its secondary functions.
-      const mainPurposes = (d.mainPurposes && d.mainPurposes.length)
-        ? d.mainPurposes
-        : (d.purposes || []);
-      if (mainPurposes.length) {
-        overviewRows.push('<tr><td class="k">Main purpose (A4)</td><td class="v">' +
-          tagList(mainPurposes) + '</td></tr>');
-      }
-      if (d.secPurposes && d.secPurposes.length) {
-        overviewRows.push('<tr><td class="k">Secondary purpose</td><td class="v">' +
-          tagList(d.secPurposes) + '</td></tr>');
-      }
-
-      // contributionActors, split by their ContributionActor.type.
-      const actors = d.actors || [];
-      const isInst = (a) => String(a.type || '').toLowerCase() === 'institution';
-      const people = actors.filter((a) => !isInst(a));
-      const insts = actors.filter(isInst);
-      if (people.length) {
-        overviewRows.push('<tr><td class="k">Contributors (people)</td><td class="v">' +
-          actorList(people) + '</td></tr>');
-      }
-      if (insts.length) {
-        overviewRows.push('<tr><td class="k">Contributors (institutions)</td><td class="v">' +
-          actorList(insts) + '</td></tr>');
-      }
-
-      if (overviewRows.length) {
-        html += '<div class="section"><h2>Details</h2><table class="props">' +
-          overviewRows.join('') + '</table></div>';
-      }
-
-      // ---- 2. Everything else --------------------------------------
-      // Rendered further down, after the connected Recs/Gaps.
-      const propRows = Object.entries(props)
-        .filter(([k]) => !overviewKeys.has(k))
-        .map(([k, v]) =>
-          '<tr><td class="k">' + esc(PROP_LABELS[k] || k) + '</td><td class="v">' + formatValue(v) + '</td></tr>'
-        ).join('');
-      const vectorRows = Object.entries(d.vectorProps || {}).map(([k, dim]) =>
-        '<tr><td class="k">' + esc(PROP_LABELS[k] || k) + '</td><td class="v">' + dim + '-dim vector</td></tr>'
-      ).join('');
-
-      // Remaining relationship-linked fields, in the backend's display order.
-      // (`references` is the C3 row, `user` renders at the bottom as
-      // "Assisted by" / "Reviewed by".)
-      Object.keys(related).forEach((key) => {
-        if (key === 'references' || key === 'user') return;
-        const group = related[key];
-        if (!group || !group.items || !group.items.length) return;
-        html += '<div class="section"><h2>' + esc(group.label) + '</h2>' +
-          itemList(group.items) + '</div>';
-      });
-
-      // Parent OI (for Rec/Gap)
-      if (d.parents && d.parents.length) {
-        html += '<div class="section"><h2>Source Document</h2>' + d.parents.map(link).join('') + '</div>';
-      }
-
-      // Connected Recs/Gaps (for OI)
-      if (d.children && d.children.length) {
-        const recs = d.children.filter(c => c.type === 'Raccomandazione');
-        const gaps = d.children.filter(c => c.type === 'Lacuna');
-        if (recs.length) {
-          html += '<div class="section"><h2>Connected Recommendations (' + recs.length + ')</h2>' + recs.map(link).join('') + '</div>';
-        }
-        if (gaps.length) {
-          html += '<div class="section"><h2>Connected Gaps (' + gaps.length + ')</h2>' + gaps.map(link).join('') + '</div>';
-        }
-        if (!recs.length && !gaps.length) {
-          html += '<div class="section"><h2>Connected Recs / Gaps</h2><div class="empty">No Rec/Gap linked to this OI.</div></div>';
-        }
-      }
-
-      // Remaining own properties: below the connected Recs/Gaps, above
-      // "Assisted by / Reviewed by".
-      if (propRows || vectorRows) {
-        html += '<div class="section"><h2>Additional Properties</h2><table class="props">' +
-          propRows + vectorRows + '</table></div>';
-      } else if (!overviewRows.length) {
-        html += '<div class="section"><div class="empty">No stored properties.</div></div>';
-      }
-
-      // Assisted by / Reviewed by, at the very bottom of the page (after the
-      // connected Recs/Gaps). Embedding-status flags never appear here: the
-      // API strips them as internal bookkeeping.
-      const assisted = (related.user && related.user.items) || [];
-      html += '<div class="section"><h2>Assisted by / Reviewed by</h2><table class="props">' +
-        '<tr><td class="k">Assisted by</td><td class="v">' +
-        (assisted.length ? itemList(assisted) : '<span class="sub">Nobody recorded yet.</span>') +
-        '</td></tr>' +
-        '<tr><td class="k">Reviewed by</td><td class="v">' +
-        '<span class="sub">No reviewer recorded yet.</span>' +
-        '</td></tr>' +
-        '</table></div>';
-
-      html += '<div class="sub">db_id: ' + esc(d.eid) + '</div>';
-      document.getElementById('content').innerHTML = html;
-    }
-
-    function tagList(items) {
-      return '<div class="tags">' +
-        items.map(p => '<span class="tag ' + (PURPOSE_CLASS[p] || '') + '">' + esc(p) + '</span>').join('') + '</div>';
-    }
-
-    // The row label already says people/institutions, so no type suffix here.
-    function actorList(actors) {
-      return '<ul class="actor-list">' +
-        actors.map(a => '<li>' + esc(a.name) + '</li>').join('') + '</ul>';
-    }
-
-    // Only http(s) links are clickable; anything else renders as plain text.
-    function safeHref(url) {
-      const u = String(url == null ? '' : url).trim();
-      return /^https?:\/\//i.test(u) ? u : '';
-    }
-
-    function plainValue(v) {
-      if (Array.isArray(v)) return v.join(', ');
-      if (v && typeof v === 'object') return JSON.stringify(v);
-      return String(v == null ? '' : v);
-    }
-
-    // `showLabel` is for rows whose heading is the URL itself, where the
-    // Reference name is still worth keeping as a caption.
-    function extraLine(item, showLabel) {
-      const bits = [];
-      if (showLabel && item.label && item.label !== item.url) bits.push(item.label);
-      Object.keys(item.props || {}).forEach((k) => {
-        bits.push((PROP_LABELS[k] || k) + ': ' + truncate(plainValue(item.props[k]), 160));
-      });
-      return bits.length
-        ? '<div class="rel-extra">' + esc(bits.join(' \u00B7 ')) + '</div>'
-        : '';
-    }
-
-    function urlList(items) {
-      const head = items.slice(0, OVERVIEW_URL_LIMIT);
-      const rest = items.slice(OVERVIEW_URL_LIMIT);
-      let out = head.map(urlItem).join('');
-      if (rest.length) {
-        out += '<details class="more"><summary>Show ' + rest.length + ' more</summary>' +
-          rest.map(urlItem).join('') + '</details>';
-      }
-      return out;
-    }
-
-    function urlItem(item) {
-      const href = safeHref(item.url);
-      if (href) {
-        return '<div class="url-item">' +
-          '<a href="' + esc(href) + '" target="_blank" rel="noopener">' + esc(item.url) + '</a>' +
-          extraLine(item, true) + '</div>';
-      }
-      // No usable URL (e.g. a physical archive only): plain text + its details.
-      return '<div class="url-item">' + esc(item.label || '') + extraLine(item, false) + '</div>';
-    }
-
-    function itemList(items) {
-      const head = items.slice(0, REL_LIST_LIMIT);
-      const rest = items.slice(REL_LIST_LIMIT);
-      let out = '<ul class="rel-list">' + head.map(relItem).join('') + '</ul>';
-      if (rest.length) {
-        out += '<details class="more"><summary>Show ' + rest.length + ' more</summary>' +
-          '<ul class="rel-list">' + rest.map(relItem).join('') + '</ul></details>';
-      }
-      return out;
-    }
-
-    function relItem(item) {
-      const href = safeHref(item.url);
-      const head = href
-        ? '<a href="' + esc(href) + '" target="_blank" rel="noopener">' + esc(item.label) + '</a>'
-        : esc(item.label);
-      return '<li class="rel-item">' + head + extraLine(item) + '</li>';
-    }
-
-    function nameOf(d) {
-      const p = d.properties || {};
-      return p.officialTitle || p.title || p.content || p.name || p.description || 'Unnamed node';
-    }
-
-    load();
-  </script>
+  <script type="module" src="js/node-page.js"></script>
 </body>
 </html>

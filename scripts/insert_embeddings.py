@@ -461,6 +461,15 @@ records, summary, keys = driver.execute_query("""
     } }
 """, database_=NEO4J_GRAPH, routing_=RoutingControl.WRITE)
 
+
+####
+records, summary, keys = driver.execute_query("""
+CREATE FULLTEXT INDEX title_fulltext IF NOT EXISTS
+FOR (n:Contribution|Recommendation|Gap|Project)
+ON EACH [n.title, n.officialTitle, n.name, n.subtitle];
+""", database_=NEO4J_GRAPH, routing_=RoutingControl.WRITE)
+###
+
 print(f'Created index for {len(records)} ({summary.counters.properties_set} properties set)')
 
 #############################################################

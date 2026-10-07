@@ -85,8 +85,96 @@ preflight() {
         -H "Access-Control-Request-Headers: ${header}"
 }
 
+# json_hygiene LABEL FILE
+# Structural leak check on a JSON response body (needs python3: grep cannot
+# tell a 1024-float embedding vector from a dimension count). Fails on:
+#   - *EmbeddingStatus keys (same filter get_node_detail() applies)
+#   - raw numeric arrays longer than 30 elements = un-summarised vectors
+#   - secret-looking keys (password/token/...) and connection strings
+#     (bolt://, neo4j://, mongodb://) anywhere in the document
+#   - leaked stack traces ("Traceback ...", "site-packages")
+#   - vectorProps values that are not int dimension counts
+# One FAIL line per violation; nothing found -> a single PASS.
+json_hygiene() {
+    local label=$1 file=$2 issues
+    if ! command -v python3 >/dev/null 2>&1; then
+        bad "$label: python3 unavailable, cannot inspect payload"
+        return 0
+    fi
+    # NB: `if ! issues=$(...)` so a python crash cannot trip `set -e`.
+    if ! issues=$(python3 - "$file" <<'PY'
+import json, re, sys
+
+try:
+    with open(sys.argv[1]) as fh:
+        doc = json.load(fh)
+except Exception as exc:                       # unreadable or non-JSON body
+    print(f"unparseable body: {exc}")
+    sys.exit(0)
+
+issues = []
+URI = re.compile(r"bolt://|neo4j\+?s?://|mongodb(\+srv)?://", re.I)
+SECRET_KEY = re.compile(r"^(password|passwd|secret|token|api_key|apikey|"
+                        r"authorization|credentials?)$", re.I)
+
+
+def walk(node, path="$"):
+    if isinstance(node, dict):
+        for key, val in node.items():
+            if re.search(r"embeddingstatus", key, re.I):
+                issues.append(f"*EmbeddingStatus key at {path}.{key}")
+            if SECRET_KEY.match(key):
+                issues.append(f"secret-looking key at {path}.{key}")
+            walk(val, f"{path}.{key}")
+    elif isinstance(node, list):
+        # An embedding vector: long, all-numeric. Titles/actors etc. are
+        # strings, score arrays are short — only vectors trip this.
+        if len(node) > 30 and all(
+                isinstance(x, (int, float)) and not isinstance(x, bool)
+                for x in node):
+            issues.append(f"raw float array (len {len(node)}) at {path}")
+        for i, val in enumerate(node):
+            walk(val, f"{path}[{i}]")
+    elif isinstance(node, str):
+        if URI.search(node):
+            issues.append(f"connection string at {path}")
+        if "Traceback (most recent call last)" in node or "site-packages" in node:
+            issues.append(f"stack trace at {path}")
+
+
+walk(doc)
+# /node must summarise vectors as dimension counts (ints), never arrays.
+vp = doc.get("vectorProps") if isinstance(doc, dict) else None
+if isinstance(vp, dict):
+    for key, val in vp.items():
+        if isinstance(val, bool) or not isinstance(val, int):
+            issues.append(f"vectorProps.{key} is {type(val).__name__}, "
+                          f"want int dimension count")
+
+print("\n".join(issues))
+PY
+    ); then
+        bad "$label: payload inspection crashed (python3 error)"
+        return 0
+    fi
+    if [ -z "$issues" ]; then
+        ok "$label: no internal keys, raw vectors, or connection strings"
+    else
+        while IFS= read -r line; do
+            [ -n "$line" ] && bad "$label: $line"
+        done <<< "$issues"
+    fi
+    return 0
+}
+
 echo "target: ${API}"
 echo "public origin: ${PUBLIC_ORIGIN}"
+if [ "$PUBLIC_ORIGIN" = "https://example.invalid" ]; then
+    # Not a FAIL (the placeholder still catches a wildcard ACAO), but the
+    # "no CORS for the real origin" claim is NOT proven by this run.
+    warn "PUBLIC_ORIGIN not set: the no-CORS checks below ran against the"
+    warn "placeholder; re-run with PUBLIC_ORIGIN=https://<your real origin>."
+fi
 
 # ---------------------------------------------------------------- reachability
 section "reachability"
@@ -97,6 +185,12 @@ if [ "$STATUS" = "000" ]; then
     exit 2
 fi
 status_is "GET /health" 200
+
+# ---------------------------------------------------------- server version banner
+# $HDRS still holds the /health response. "server: uvicorn" (no digits) passes;
+# "Server: Apache/2.4.58 (Ubuntu)" fails -> set "ServerTokens Prod" in Apache.
+section "server banner carries no version number"
+header_absent "server: header has no x.y version digits" '^server:.*[0-9]+\.[0-9]+'
 
 # ------------------------------------------------------- schema must stay dark
 section "schema endpoints disabled (no /docs, /redoc, /openapi.json)"
@@ -148,18 +242,73 @@ status_is "preflight asking for header authorization" 400
 request OPTIONS /search
 status_is "plain OPTIONS /search (no preflight headers) reaches the app" 405
 
-# ------------------------------------------------------- node payload hygiene
-if [ -n "${EID:-}" ]; then
-    section "node payload (EID set)"
+# ------------------------------------------------------- error responses stay generic
+# 4xx bodies must be plain FastAPI JSON, never a traceback or connection
+# details (a Neo4j outage surfaces here first).
+section "error responses leak no internals"
+STATUS=$(curl -sS -o "$TMP/err422.json" -w '%{http_code}' --max-time "$TIMEOUT" \
+             -X POST -H 'Content-Type: application/json' -d '{broken' \
+             "${API}/search" 2>"$ERR" || echo 000)
+status_is "POST /search with malformed JSON" 422
+json_hygiene "malformed-JSON error body" "$TMP/err422.json"
+STATUS=$(curl -sS -o "$TMP/err404.json" -w '%{http_code}' --max-time "$TIMEOUT" \
+             "${API}/node/not-an-eid" 2>"$ERR" || echo 000)
+status_is "GET /node/not-an-eid" 404
+json_hygiene "unknown-node error body" "$TMP/err404.json"
+
+# ------------------------------------------------------- payload hygiene
+# One small search probe every run (not only when EID is passed in): its
+# payload is checked below, and its first result's eid is what the /node
+# check fetches — unless the operator pinned EID themselves.
+section "payload hygiene (search + node payloads)"
+PROBE_CODE=$(curl -sS -o "$TMP/search.json" -w '%{http_code}' --max-time "$TIMEOUT" \
+                 -X POST -H 'Content-Type: application/json' \
+                 -d '{"query":"energy efficiency","source_k":3,"final_k":1}' \
+                 "${API}/search" 2>"$ERR" || echo 000)
+STATUS=$PROBE_CODE
+status_is "POST /search probe (source_k=3, final_k=1)" 200
+if [ "$PROBE_CODE" = "200" ]; then
+    json_hygiene "search payload" "$TMP/search.json"
+fi
+
+# The node to inspect: EID if given, else the probe's first hit.
+CHECK_EID="${EID:-}"
+if [ -z "$CHECK_EID" ] && [ "$PROBE_CODE" = "200" ]; then
+    # neo4j_id doubles as the public node key (static/index.html uses it as
+    # data-eid), and /node accepts it as the elementId path segment.
+    CHECK_EID=$(python3 -c 'import json,sys; r=json.load(open(sys.argv[1])).get("results") or []; print(r[0].get("neo4j_id", "") if r else "")' \
+                    "$TMP/search.json" 2>/dev/null || true)
+fi
+if [ -z "$CHECK_EID" ]; then
+    bad "no node to inspect (search returned no results; pass EID=... explicitly)"
+else
     NODE_CODE=$(curl -sS -o "$TMP/node.json" -w '%{http_code}' --max-time "$TIMEOUT" \
-                    "${API}/node/${EID}" 2>"$ERR" || echo 000)
+                    "${API}/node/${CHECK_EID}" 2>"$ERR" || echo 000)
     if [ "$NODE_CODE" != "200" ]; then
-        bad "GET /node/<EID> -> ${NODE_CODE}, want 200 (stale eid? get one from /search)"
-    elif grep -qi 'embeddingstatus' "$TMP/node.json"; then
-        bad "node payload leaks *EmbeddingStatus keys"
+        bad "GET /node/<eid> -> ${NODE_CODE}, want 200 (stale eid? get one from /search)"
     else
-        ok "node payload has no *EmbeddingStatus keys"
+        # NB: published-by-choice fields (expert_evaluation,
+        # internal_record_state, note, submitted, ...) are NOT blocked here —
+        # the frontend renders them; see git history for that decision.
+        json_hygiene "node payload" "$TMP/node.json"
     fi
+fi
+
+# --------------------------------------------- public surface must stay dark
+# Optional: same assertions through Apache once PUBLIC_API is set. /metrics
+# is served locally on purpose (scrape it from the server after logging in),
+# so it must be unreachable from outside; /docs was never proxied either.
+if [ -n "${PUBLIC_API:-}" ]; then
+    section "public URL surface (${PUBLIC_API}): internals not proxied"
+    for path in /metrics /docs /redoc /openapi.json; do
+        code=$(curl -sS -o /dev/null -w '%{http_code}' --max-time "$TIMEOUT" \
+                   "${PUBLIC_API}${path}" 2>"$ERR" || echo 000)
+        if [ "$code" = "404" ]; then
+            ok "GET ${path} through public URL -> 404"
+        else
+            bad "GET ${path} through public URL -> got $code, want 404"
+        fi
+    done
 fi
 
 # --------------------------------------------------------------------- verdict

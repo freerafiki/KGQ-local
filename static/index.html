@@ -4,206 +4,8 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>KGQ Search</title>
-  <style>
-    :root {
-      --accent: #1a73e8;
-      --accent-dark: #1765cc;
-      --border: #dadce0;
-      --muted: #5f6368;
-      --bg: #fff;
-      --card-border: #e1e4e8;
-      --oi: #1a73e8;
-      --rec: #188038;
-      --gap: #e37400;
-      --prj: #e91e63;
-      /* FormalType badge colors (Doc Type filter entries) */
-      --paper: #c5221f;
-      --model: #00897b;
-      --plan: #1967d2;
-      --norm: #8430ce;
-      --dataset: #b06000;
-      /* Purpose tier: deliberately MUTED mid-tones (badges keep the
-         saturated tier) — hue kinship with the related type where natural. */
-      --pv-val: #4285f4;   /* Valutazione      - blue    */
-      --pv-mon: #34a853;   /* Monitoraggio     - green   */
-      --pv-ric: #f9ab00;   /* Ricostruzione    - amber   */
-      --pv-pre: #a142f4;   /* Previsione       - violet  */
-      --pv-sup: #12b5cb;   /* Supporto         - cyan    */
-      --pv-gov: #78909c;   /* Governance       - slate   */
-      --pv-gap: #fa7b17;   /* Gap conoscenza   - orange  */
-    }
-    * { box-sizing: border-box; }
-    html, body { height: 100%; }
-    body {
-      margin: 0;
-      font-family: Arial, Helvetica, sans-serif;
-      background: var(--bg);
-      color: #202124;
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      height: 100vh;
-      overflow: hidden;
-      padding: 0 16px;
-    }
-    .container {
-      display: flex; flex-direction: column;
-      width: 100%; max-width: 1000px; height: 100%;
-      margin: 0 auto;
-    }
-    .logo { text-align: center; font-size: 28px; letter-spacing: -1px; margin: 18px 0 14px; font-weight: 400; flex: 0 0 auto; }
-    .logo b { color: var(--accent); }
-    .logo .tag { font-size: 14px; font-weight: 400; letter-spacing: 0; color: var(--muted); margin-left: 4px; }
-    .searchbar {
-      display: flex; align-items: center; gap: 8px;
-      border: 1px solid var(--border); border-radius: 24px;
-      padding: 12px 18px; box-shadow: none; transition: box-shadow .2s, border-color .2s;
-    }
-    .searchbar:focus-within { box-shadow: 0 1px 6px rgba(32,33,36,.28); border-color: transparent; }
-    .searchbar input {
-      flex: 1; border: none; outline: none; font-size: 18px; background: transparent; min-width: 0;
-    }
-    .searchbar svg { fill: var(--accent); flex-shrink: 0; }
-    .btn {
-      border: none; border-radius: 6px; padding: 10px 20px; font-size: 14px; cursor: pointer;
-    }
-    .btn-primary { background: var(--accent); color: #fff; }
-    .btn-primary:hover { background: var(--accent-dark); }
-    .btn-primary:disabled { background: #a8c7fa; cursor: default; }
-    .layout { flex: 1 1 auto; min-height: 0; display: flex; gap: 28px; margin-top: 24px; padding: 0 0 16px; }
-    .col-filters { flex: 0 0 24%; min-width: 0; overflow-y: auto; overscroll-behavior: contain; padding-right: 4px; }
-    .col-results { flex: 1 1 auto; min-width: 0; overflow-y: auto; }
-    .panel-title { margin: 0 2px 4px; font-size: 16px; font-weight: 700; }
-    .section-title { margin: 0 0 4px; font-size: 16px; font-weight: 700; }
-    .small-title { font-size: 12px;}
-    .filter-panel {
-      padding: 12px 14px 6px; border: 1px solid var(--card-border); border-radius: 10px;
-    }
-    .filter-group { border-top: 1px solid var(--card-border); }
-    .filter-group summary {
-      list-style: none; cursor: pointer; user-select: none;
-      font-size: 13px; color: var(--muted); text-transform: uppercase; letter-spacing: .5px; font-weight: 700;
-      padding: 10px 0; display: flex; justify-content: space-between; align-items: center;
-    }
-    .filter-group summary::-webkit-details-marker { display: none; }
-    .filter-group summary::after { content: "\25B6"; font-size: 10px; transition: transform .2s; }
-    .filter-group[open] summary::after { transform: rotate(90deg); }
-    .group-body { padding: 2px 0 12px; }
-    .adv-body label { display: flex; flex-direction: column; font-size: 13px; color: var(--muted); margin-bottom: 8px; }
-    .adv-body input { margin-top: 4px; width: 110px; padding: 6px; border: 1px solid var(--border); border-radius: 6px; font-size: 14px; }
-    .actor-input { width: 100%; padding: 7px 10px; border: 1px solid var(--border); border-radius: 6px; font-size: 14px; }
-    .actor-input::placeholder { color: #9aa0a6; }
-    .actor-list { max-height: 160px; overflow-y: auto; border: 1px solid var(--border); border-radius: 6px; margin-top: 8px; }
-    .actor-item { display: flex; align-items: center; gap: 8px; padding: 6px 10px; font-size: 13px; cursor: pointer; }
-    .actor-item:hover { background: #f1f3f4; }
-    .actor-item input { accent-color: var(--accent); cursor: pointer; }
-    .actor-empty { padding: 8px 10px; font-size: 13px; color: var(--muted); }
-    .actor-chips { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
-    .chip { display: inline-flex; align-items: center; gap: 6px; background: #e8f0fe; color: #174ea6; font-size: 12px; padding: 3px 8px; border-radius: 12px; }
-    .chip button { background: none; border: none; cursor: pointer; color: #174ea6; font-size: 13px; line-height: 1; padding: 0; }
-    .chk {
-      display: flex; align-items: center; gap: 10px; font-size: 15px; cursor: pointer;
-      padding: 7px 0; color: #202124;
-    }
-    .chk input { width: 16px; height: 16px; accent-color: var(--accent); cursor: pointer; }
-    /* Two-line filter label: category + smaller description line */
-    .chk-text { display: flex; flex-direction: column; line-height: 1.3; }
-    .chk-desc { font-size: 11.5px; font-weight: 400; color: var(--muted); }
-    .dot { width: 12px; height: 12px; border-radius: 50%; flex-shrink: 0; display: inline-block; }
-    .dot.oi { background: var(--oi); }
-    .dot.rec { background: var(--rec); }
-    .dot.gap { background: var(--gap); }
-    .dot.prj { background: var(--prj); }
-    .dot.paper { background: var(--paper); }
-    .dot.model { background: var(--model); }
-    .dot.plan { background: var(--plan); }
-    .dot.norm { background: var(--norm); }
-    .dot.dataset { background: var(--dataset); }
-    .dot.pv-val { background: var(--pv-val); }
-    .dot.pv-mon { background: var(--pv-mon); }
-    .dot.pv-ric { background: var(--pv-ric); }
-    .dot.pv-pre { background: var(--pv-pre); }
-    .dot.pv-sup { background: var(--pv-sup); }
-    .dot.pv-gov { background: var(--pv-gov); }
-    .dot.pv-gap { background: var(--pv-gap); }
-    /* Search summary, shown under the Filters card in the left column:
-       one fact per line. The separator belongs to the title so the whole
-       block (title + lines + footer) reads as one section. */
-    .col-filters .section-title {
-      margin-top: 14px; padding-top: 10px;
-      border-top: 1px solid var(--card-border);
-    }
-    .meta { color: var(--muted); font-size: 13px; }
-    .meta > div { margin-top: 3px; }
-    .meta .meta-q {
-      color: #202124; font-weight: 600; font-size: 13.5px;
-      overflow-wrap: anywhere; margin-top: 0;
-    }
-    .results { margin-top: 4px; }
-    .card {
-      border: 1px solid var(--card-border); border-radius: 10px; padding: 16px; margin-bottom: 14px;
-      cursor: pointer; transition: border-color .15s, box-shadow .15s;
-    }
-    .card:hover { border-color: var(--accent); box-shadow: 0 1px 5px rgba(32,33,36,.12); }
-    .card:active { border-color: var(--accent-dark); }
-    .card-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 10px; }
-    .name { font-size: 17px; font-weight: 600; color: var(--accent); flex: 1; min-width: 0; }
-    .badge {
-      box-sizing: border-box; flex-shrink: 0; display: inline-block;
-      /* Fixed width so every card's badge aligns in one vertical column,
-         whatever the label (DATASET/PROJECT are the longest + icon). */
-      width: 94px; white-space: nowrap;
-      text-align: center;
-      font-size: 11px; font-weight: 700; letter-spacing: .4px; text-transform: uppercase;
-      color: #fff; border-radius: 12px; padding: 3px 10px;
-    }
-    .badge.oi { background: var(--oi); }
-    .badge.rec { background: var(--rec); }
-    .badge.gap { background: var(--gap); }
-    .badge.prj { background: var(--prj); }
-    .badge.paper { background: var(--paper); }
-    .badge.model { background: var(--model); }
-    .badge.plan { background: var(--plan); }
-    .badge.norm { background: var(--norm); }
-    .badge.dataset { background: var(--dataset); }
-    .badge.ft { background: var(--muted); }
-    /* Badge icon: <use> into the inline Lucide sprite at the top of <body>.
-       Inherited properties pass through the <use> shadow tree, so the stroke
-       styling lives here rather than in each <symbol>. */
-    .bic {
-      width: 11px; height: 11px; vertical-align: -1px; margin-right: 4px;
-      fill: none; stroke: currentColor; stroke-width: 2.2;
-      stroke-linecap: round; stroke-linejoin: round;
-    }
-    .preview {
-      color: #3c4043; font-size: 14px; line-height: 1.5; margin: 0 0 10px;
-      display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden;
-    }
-    .preview:empty { display: none; }
-    .full { display: none; margin-bottom: 10px; }
-    .full .field { color: #3c4043; font-size: 14px; line-height: 1.55; margin-bottom: 8px; }
-    .full .flabel { font-weight: 700; color: #202124; }
-    .card.open .full { display: block; }
-    .card.open .preview { display: none; }
-    .toggle {
-      background: none; border: none; color: var(--accent); cursor: pointer;
-      font-size: 14px; padding: 0; margin-bottom: 10px;
-    }
-    .toggle:hover { text-decoration: underline; }
-    .scores { font-size: 13px; color: var(--muted); background: #f8f9fa; border-radius: 6px; padding: 6px 10px; overflow-wrap: anywhere; }
-    .scores b { color: #202124; }
-    /* Reference person + year, squeezed between "Show more" and the scores. */
-    .card-meta { font-size: 13px; color: var(--muted); margin-bottom: 8px; overflow-wrap: anywhere; }
-    .card-meta .mlabel { color: #202124; font-weight: 700; }
-    .card-meta .msep { margin: 0 8px; }
-    .parent-row { font-size: 13px; color: var(--muted); margin-top: 8px; }
-    .parent-row .plabel { color: #202124; font-weight: 700; }
-    .empty, .error, .loading { color: var(--muted); text-align: center; padding: 24px 0; }
-    .error { color: #d93025; }
-    footer { margin: 40px 0 20px; font-size: 12px; color: #9aa0a6; }
-    /* Footer now sits in the left column, right under the summary lines. */
-    .col-filters footer { margin: 14px 0 4px; }
-  </style>
+  <!-- Page styles live next to the markup (node.html has its own node.css). -->
+  <link rel="stylesheet" href="app.css">
 </head>
 <body>
   <!-- Inline icon sprite: Icons: lucide-static v0.544.0 (ISC License) -->
@@ -219,16 +21,36 @@
     <symbol id="ic-oi" viewBox="0 0 24 24"><path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z" /> <path d="M14 2v4a2 2 0 0 0 2 2h4" /></symbol>
     <symbol id="ic-ft" viewBox="0 0 24 24"><path d="m21 21-4.34-4.34" /> <circle cx="11" cy="11" r="8" /></symbol>
   </svg>
-  <div class="container">
+
+  <!-- #app is the Vue mount point (see js/search-page.js).
+       The markup below is the ROOT COMPONENT'S TEMPLATE: Vue compiles it at
+       mount, so the dynamic parts carry v-* directives instead of being
+       written by hand in JS. Repeated pieces (cards, contributor facets) are
+       child components; everything else is plain static markup.
+       No build step: Vue is vendored in static/vendor/ and imported as an ES
+       module, so the page is still served as static files. -->
+  <div class="container" id="app" v-cloak>
     <div class="logo"><b>V<span class="small-title">enice</span>C<span class="small-title">limate</span>D<span class="small-title">ata</span>B<span class="small-title">ase</span></b> Search<sup class="tag">prototype</sup></div>
 
-    <form id="search-form" autocomplete="off">
+    <!-- Search mode switcher (ARIA tabs, DeepL-style pill row). Selecting a
+         tab re-runs the query already on screen, so the selected tab and the
+         shown results never disagree. Roving tabindex: arrows move selection. -->
+    <div class="mode-tabs" role="tablist" aria-label="Search mode" @keydown="onTabKeydown">
+      <button v-for="m in modeEntries" :key="m.value" type="button" role="tab" class="mode-tab"
+              :id="'tab-' + m.value"
+              :aria-selected="mode === m.value ? 'true' : 'false'"
+              aria-controls="results-panel"
+              :tabindex="mode === m.value ? 0 : -1"
+              @click="selectMode(m.value)">{{ m.label }}</button>
+    </div>
+
+    <form @submit.prevent="search()" autocomplete="off">
       <div class="searchbar">
         <svg focusable="false" height="20" viewBox="0 0 24 24" width="20">
           <path d="M15.5 14h-.79l-.28-.27a6.5 6.5 0 1 0-.7.7l.27.28v.79l5 4.99L20.49 19zm-6 0A4.5 4.5 0 1 1 14 9.5 4.5 4.5 0 0 1 9.5 14z"></path>
         </svg>
-        <input id="q" name="q" type="text" placeholder="Search the venice climate database..." aria-label="Search">
-        <button id="search-btn" class="btn btn-primary" type="submit">Search</button>
+        <input ref="qInput" v-model="query" type="text" placeholder="Search the venice climate database..." aria-label="Search">
+        <button class="btn btn-primary" type="submit" :disabled="phase === 'loading'">Search</button>
       </div>
     </form>
 
@@ -237,566 +59,88 @@
         <div class="filter-panel">
           <h3 class="panel-title">Filters</h3>
 
-          <details class="filter-group" id="type-group">
+          <details class="filter-group">
             <summary>Doc Type</summary>
             <div class="group-body">
-              <!-- OI is filtered through its FormalType: these 5 entries ARE
-                   the OI type (every Contribution has exactly one), so an OI
-                   shows iff one of the ticked entries matches its badge. -->
-              <label class="chk"><input type="checkbox" class="formal" value="Paper" checked> <span class="dot paper"></span> Paper</label>
-              <label class="chk"><input type="checkbox" class="formal" value="Model" checked> <span class="dot model"></span> Model</label>
-              <label class="chk"><input type="checkbox" class="formal" value="Plan" checked> <span class="dot plan"></span> Plan</label>
-              <label class="chk"><input type="checkbox" class="formal" value="Norm" checked> <span class="dot norm"></span> Norm</label>
-              <label class="chk"><input type="checkbox" class="formal" value="Dataset" checked> <span class="dot dataset"></span> Dataset</label>
-              <label class="chk"><input type="checkbox" id="f-rec" value="Recommendation" checked> <span class="dot rec"></span> Raccomandazioni (Rec)</label>
-              <label class="chk"><input type="checkbox" id="f-gap" value="Gap" checked> <span class="dot gap"></span> Lacune (Gap)</label>
-              <label class="chk"><input type="checkbox" id="f-prj" value="Project" checked> <span class="dot prj"></span> Progetti (Project)</label>
+              <!-- A Contribution is filtered through its FormalType: these 5
+                   entries ARE its document type (every Contribution has
+                   exactly one), so one shows iff a ticked entry matches its
+                   badge. -->
+              <label class="chk" v-for="f in formalEntries" :key="f.value"><input type="checkbox" v-model="formal[f.value]"> <span class="dot" :class="f.dot"></span> {{ f.value }}</label>
+              <label class="chk" v-for="t in typeEntries" :key="t.value"><input type="checkbox" v-model="types[t.value]"> <span class="dot" :class="t.dot"></span> {{ t.label }}</label>
             </div>
           </details>
 
-          <details class="filter-group" id="purpose-group">
+          <details class="filter-group">
             <summary>Purpose</summary>
             <div class="group-body">
               <!-- Second line = Purpose.name from the graph (category prefix
-                   stripped where the name starts with it). Checkbox values
-                   MUST stay the taxonomy labels from query_util.PURPOSE_CATEGORIES. -->
-              <label class="chk"><input type="checkbox" value="Valutazione" checked> <span class="dot pv-val"></span><span class="chk-text">Valutazione<span class="chk-desc">i.e. impatti, rischi, conseguenze</span></span></label>
-              <label class="chk"><input type="checkbox" value="Monitoraggio" checked> <span class="dot pv-mon"></span><span class="chk-text">Monitoraggio<span class="chk-desc">e/o descrizione dello stato attuale</span></span></label>
-              <label class="chk"><input type="checkbox" value="Ricostruzione" checked> <span class="dot pv-ric"></span><span class="chk-text">Ricostruzione<span class="chk-desc">e interpretazione del passato del sistema</span></span></label>
-              <label class="chk"><input type="checkbox" value="Previsione" checked> <span class="dot pv-pre"></span><span class="chk-text">Previsione<span class="chk-desc">o rappresentazione del futuro</span></span></label>
-              <label class="chk"><input type="checkbox" value="Supporto decisioni" checked> <span class="dot pv-sup"></span><span class="chk-text">Supporto decisioni<span class="chk-desc">Supporto diretto alle decisioni</span></span></label>
-              <label class="chk"><input type="checkbox" value="Governance" checked> <span class="dot pv-gov"></span><span class="chk-text">Governance<span class="chk-desc">Regole, processi o governance</span></span></label>
-              <label class="chk"><input type="checkbox" value="Gap di conoscenza" checked> <span class="dot pv-gap"></span><span class="chk-text">Gap di conoscenza<span class="chk-desc">Evidenzia un limite o un gap di conoscenza</span></span></label>
+                   stripped where the name starts with it); entries come from
+                   PURPOSE_ENTRIES in js/state.js and their values MUST stay the
+                   taxonomy labels from query_util.PURPOSE_CATEGORIES. -->
+              <label class="chk" v-for="p in purposeEntries" :key="p.value"><input type="checkbox" v-model="purposes[p.value]"> <span class="dot" :class="p.dot"></span><span class="chk-text">{{ p.value }}<span class="chk-desc">{{ p.desc }}</span></span></label>
             </div>
           </details>
 
-          <details class="filter-group" id="person-group">
-            <summary>People</summary>
-            <div class="group-body">
-              <input type="text" id="person-input" class="actor-input" placeholder="Type to filter…" autocomplete="off">
-              <div id="person-list" class="actor-list"></div>
-              <div id="person-chips" class="actor-chips"></div>
-            </div>
-          </details>
+          <actor-facet facet="person"></actor-facet>
+          <actor-facet facet="institution"></actor-facet>
 
-          <details class="filter-group" id="institution-group">
-            <summary>Institutions</summary>
-            <div class="group-body">
-              <input type="text" id="institution-input" class="actor-input" placeholder="Type to filter…" autocomplete="off">
-              <div id="institution-list" class="actor-list"></div>
-              <div id="institution-chips" class="actor-chips"></div>
-            </div>
-          </details>
-
-          <details class="filter-group" id="adv-group">
+          <details class="filter-group">
             <summary>Advanced parameters</summary>
             <div class="group-body adv-body">
               <label>source_k
-                <input type="number" id="source_k" value="20" min="1">
+                <input type="number" v-model.number="source_k" min="1">
               </label>
               <label>final_k
-                <input type="number" id="final_k" value="50" min="1">
+                <input type="number" v-model.number="final_k" min="1">
               </label>
               <label>rrf_constant
-                <input type="number" id="rrf_constant" value="60" min="1">
+                <input type="number" v-model.number="rrf_constant" min="1">
               </label>
             </div>
           </details>
         </div>
-        <!-- Search summary below the Filters card (keeps the results
-             column full-width). #meta must stay EMPTY in the markup:
-             render() writes its innerHTML on every search, so anything
-             nested inside it (e.g. the footer) would be wiped out. -->
+
+        <!-- Search summary below the Filters card (keeps the results column
+             full-width). Shown only after a successful search or restore:
+             while loading/failed the old page cleared it too. -->
         <h3 class="section-title">Results Summary</h3>
-        <div id="meta" class="meta"></div>
+        <div class="meta">
+          <template v-if="phase === 'done'">
+            {{ searchPrefix }}<div class="meta-q">“{{ submittedQuery }}”</div>
+            <div> got {{ countText }}</div>
+            <div> took {{ embedTime }}s to embed the query string</div>
+            <div> took {{ searchTime }}s to search the VCDB</div>
+          </template>
+        </div>
         <footer>KGQ search prototype</footer>
       </aside>
 
       <section class="col-results">
-        <div id="results" class="results"></div>
+        <!-- The mode tabs control this panel (labelled by the active tab). -->
+        <div class="results" id="results-panel" role="tabpanel" :aria-labelledby="'tab-' + mode">
+          <div v-if="phase === 'loading'" class="loading">Searching…</div>
+          <div v-else-if="phase === 'error'" class="error">Search failed: {{ error }}</div>
+          <template v-else-if="phase === 'done'">
+            <div v-if="!visible.length" class="empty">No results found.</div>
+            <template v-else>
+              <!-- A group = a parent document's card plus its Rec/Gap children
+                   nested underneath; a result without a visible parent is a
+                   group with no children. -->
+              <template v-for="g in groups" :key="g.key">
+                <result-card v-if="g.root" :result="g.root" :ft-min="ft[0]" :ft-max="ft[1]" @open="openNode"></result-card>
+                <div v-if="g.children.length" class="child-group">
+                  <result-card v-for="c in g.children" :key="c.neo4j_id" :result="c" :nested="!!g.root" :ft-min="ft[0]" :ft-max="ft[1]" @open="openNode"></result-card>
+                </div>
+              </template>
+            </template>
+          </template>
+          <!-- phase === 'idle': nothing has been searched yet, the column is empty -->
+        </div>
       </section>
     </div>
   </div>
 
-  <script>
-    // API base (index.html and node.html share this rule):
-    //  - served by the dev static server (28080) → talk to uvicorn directly on :28000
-    //  - served by the production web server (Apache, 80/443 or any other port)
-    //    → same-origin, i.e. the reverse proxy forwards /search, /node, /health
-    const API_BASE = (location.port === '28080')
-      ? location.protocol + '//' + location.hostname + ':28000'
-      : '';
-
-    const form       = document.getElementById('search-form');
-    const qInput     = document.getElementById('q');
-    const btn        = document.getElementById('search-btn');
-    const metaEl     = document.getElementById('meta');
-    const resultsEl  = document.getElementById('results');
-    // The Doc Type group holds two axes: the 5 FormalType entries (OI) and
-    // the plain node types (Rec/Gap/Project). They map differently, so keep
-    // two collections.
-    const filterCheckboxes = document.querySelectorAll('#type-group .chk input:not(.formal)');
-    const formalCheckboxes = document.querySelectorAll('#type-group .chk input.formal');
-    const purposeCheckboxes = document.querySelectorAll('#purpose-group .chk input');
-
-    const BADGE_CLASS = {
-      'Oggetto Informativo': 'oi',
-      'Raccomandazione':     'rec',
-      'Lacuna':              'gap',
-      'Progetto':            'prj',
-    };
-    const BADGE_SHORT = {
-      'Oggetto Informativo': 'OI',
-      'Raccomandazione':     'Rec',
-      'Lacuna':              'Gap',
-      'Progetto':            'Project',
-    };
-    // The 5 FormalType badge words = the OI entries of the Doc Type filter.
-    const FORMAL_TYPES = ['Paper', 'Model', 'Plan', 'Norm', 'Dataset'];
-    // FormalType raw text ("Documento / report --> rapporti, ...") -> short
-    // badge word. Only the part before "-->" is matched; '' means "no match"
-    // and the caller keeps the generic "OI" badge.
-    // <svg><use> into the inline sprite at the top of <body> (Lucide, ISC).
-    // cls = badge CSS class (paper/model/plan/norm/dataset/rec/gap/prj/oi/ft).
-    function badgeIcon(cls) {
-      return '<svg class="bic" aria-hidden="true"><use href="#ic-' + cls + '"></use></svg>';
-    }
-
-    function formalBadge(ft) {
-      if (!ft) return '';
-      const head = String(ft).split('-->')[0].toLowerCase();
-      if (head.includes('docum'))                             return 'Paper';
-      if (head.includes('modell'))                            return 'Model';
-      if (head.includes('piano') || head.includes('program')) return 'Plan';
-      if (head.includes('normativ') || head.includes('atto')) return 'Norm';
-      if (head.includes('dataset') || head.includes('dati'))  return 'Dataset';
-      return '';
-    }
-    const FILTER_TO_TYPE = {
-      'Recommendation':  'Raccomandazione',
-      'Gap':             'Lacuna',
-      'Project':         'Progetto',
-      // 'Contribution' has no entry on purpose: OIs are filtered by their
-      // FormalType (formalCheckboxes / FORMAL_TYPES), not by node type.
-    };
-
-    let allResults = [];
-    let lastQuery  = '';
-    // Timings of the last successful API response (kept so re-renders caused
-    // by the client-side filters keep showing them instead of 0.000).
-    let lastTimings = {};
-    let selectedActors = new Set();
-    let actorNames = [];
-
-    // ---- Search persistence ------------------------------------------
-    // Back/Forward — or a fresh reload after the browser evicted the
-    // back-forward cache — must not lose the current search. State lives
-    // in sessionStorage: PER TAB, so other tabs/users can never collide.
-    const SEARCH_STORE_KEY = 'kgq.search.v1';
-
-    function saveSearchState() {
-      if (!lastQuery || !allResults.length) return;
-      try {
-        sessionStorage.setItem(SEARCH_STORE_KEY, JSON.stringify({
-          query: lastQuery,
-          source_k: clampInt('source_k', 10),
-          final_k: clampInt('final_k', 20),
-          rrf_constant: clampInt('rrf_constant', 60),
-          results: allResults,
-          timings: lastTimings,
-        }));
-      } catch (e) { /* quota exceeded / private mode: restore just won't happen */ }
-    }
-
-    // Re-render from the stored results with NO API call, so restoring
-    // works even while the backend is busy with someone else's search.
-    function restoreSearchState() {
-      let saved = null;
-      try { saved = JSON.parse(sessionStorage.getItem(SEARCH_STORE_KEY)); } catch (e) {}
-      if (!saved || typeof saved.query !== 'string' || !saved.query ||
-          !Array.isArray(saved.results) || !saved.results.length) return false;
-      qInput.value = saved.query;
-      if (Number.isFinite(saved.source_k)) document.getElementById('source_k').value = saved.source_k;
-      if (Number.isFinite(saved.final_k)) document.getElementById('final_k').value = saved.final_k;
-      if (Number.isFinite(saved.rrf_constant)) document.getElementById('rrf_constant').value = saved.rrf_constant;
-      lastQuery = saved.query;
-      allResults = saved.results;
-      lastTimings = saved.timings || {};
-      seedActorLists(allResults);
-      renderFiltered();   // honour the filter chain, same as a fresh search
-      return true;
-    }
-
-    form.addEventListener('submit', (e) => { e.preventDefault(); search(); });
-
-    // Toggling a filter re-filters the ALREADY-FETCHED results locally, no
-    // round trip to the API. Unchecked = excluded; all default to checked so
-    // unchecking one hides results carrying that tag.
-    filterCheckboxes.forEach(cb => cb.addEventListener('change', renderFiltered));
-    formalCheckboxes.forEach(cb => cb.addEventListener('change', renderFiltered));
-    purposeCheckboxes.forEach(cb => cb.addEventListener('change', renderFiltered));
-
-    function activeFilterTypes() {
-      return Array.from(filterCheckboxes)
-        .filter(cb => cb.checked)
-        .map(cb => FILTER_TO_TYPE[cb.value]);
-    }
-
-    function activeFormalTypes() {
-      return Array.from(formalCheckboxes)
-        .filter(cb => cb.checked)
-        .map(cb => cb.value);
-    }
-
-    function activePurposes() {
-      return Array.from(purposeCheckboxes)
-        .filter(cb => cb.checked)
-        .map(cb => cb.value);
-    }
-
-    // Whitelist semantics per axis: a result survives if it carries at least
-    // one active tag. Results with NO tags on an axis (e.g. a Rec/Gap with no
-    // purpose) are "untagged" and always pass that axis.
-    function passesAxis(tags, active) {
-      if (!tags.length) return true;
-      if (!active.length) return false;
-      return tags.some(t => active.includes(t));
-    }
-
-    function renderFiltered() {
-      if (!lastQuery) return;
-      const typeActive = activeFilterTypes();
-      const formalActive = activeFormalTypes();
-      const purposeActive = activePurposes();
-      const visible = allResults.filter(r => {
-        // OIs are filtered by their FormalType badge (the 5 Doc Type
-        // entries); every other node type by its own entry. An OI without
-        // a recognised FormalType only survives while NOTHING is narrowed.
-        let typeOk;
-        if (r.type === 'Oggetto Informativo') {
-          const word = formalBadge(r.formalType);
-          typeOk = word ? passesAxis([word], formalActive)
-                        : formalActive.length === FORMAL_TYPES.length;
-        } else {
-          typeOk = passesAxis([r.type], typeActive);
-        }
-        return typeOk &&
-          passesAxis(r.purposes || [], purposeActive) &&
-          // People and Institutions are independent axes: a result has to
-          // satisfy every facet that has a query or a selection.
-          actorFacets.every(f => f.passes(r));
-      });
-      render(visible, { all: allResults, ...lastTimings });
-    }
-
-    // Both constraints apply when set: a live-typed query (substring) and the
-    // selected list entries (OR-ed, result must carry at least one of them).
-    function passesActorFilter(actors, query, selected) {
-      if (query && !actors.some(a => a.toLowerCase().includes(query))) return false;
-      if (selected.length && !selected.some(s => actors.includes(s))) return false;
-      return true;
-    }
-
-    // ---- Contributor filters -------------------------------------
-    // The single "Contributor" filter is now two facets sharing one shape:
-    // a searchable checkbox list (live substring query + OR-ed selections).
-    // Each facet reads a different payload field (people vs institutions),
-    // and the facets are combined with AND, so a result has to satisfy every
-    // facet that actually constrains something (a query or a selection).
-    function makeFacet(cfg) {
-      const facet = {
-        pick:     cfg.pick,          // names this facet sees on one result
-        input:    document.getElementById(cfg.input),
-        listEl:   document.getElementById(cfg.list),
-        chipsEl:  document.getElementById(cfg.chips),
-        emptyMsg: cfg.emptyMsg,
-        names:    [],                // all names of this facet in the result set
-        selected: new Set(),
-      };
-
-      facet.query = () => facet.input.value.trim().toLowerCase();
-
-      facet.seed = (results) => {
-        const names = [];
-        results.forEach(r => facet.pick(r).forEach(a => {
-          if (!names.includes(a)) names.push(a);
-        }));
-        facet.names = names.sort((a, b) => a.localeCompare(b));
-        facet.selected = new Set(
-          Array.from(facet.selected).filter(s => facet.names.includes(s)));
-        facet.renderList();
-        facet.renderChips();
-      };
-
-      facet.renderList = () => {
-        const q = facet.query();
-        const matches = q ? facet.names.filter(n => n.toLowerCase().includes(q)) : facet.names;
-        if (!matches.length) {
-          facet.listEl.innerHTML = '<div class="actor-empty">' + facet.emptyMsg + '</div>';
-          return;
-        }
-        facet.listEl.innerHTML = matches.map(n =>
-          '<label class="actor-item"><input type="checkbox" value="' + escapeHtml(n) + '"' +
-          (facet.selected.has(n) ? ' checked' : '') + '> ' + escapeHtml(n) + '</label>'
-        ).join('');
-      };
-
-      facet.renderChips = () => {
-        facet.chipsEl.innerHTML = Array.from(facet.selected).map(n =>
-          '<span class="chip">' + escapeHtml(n) +
-          '<button type="button" title="Remove" data-actor="' + escapeHtml(n) + '">' + '\u00D7' + '</button></span>'
-        ).join('');
-      };
-
-      facet.passes = (r) =>
-        passesActorFilter(facet.pick(r), facet.query(), Array.from(facet.selected));
-
-      facet.input.addEventListener('input', () => { facet.renderList(); renderFiltered(); });
-
-      // Toggle selections via checkbox input events (delegated).
-      facet.listEl.addEventListener('change', (e) => {
-        const cb = e.target.closest('input[type="checkbox"]');
-        if (!cb) return;
-        if (cb.checked) facet.selected.add(cb.value);
-        else facet.selected.delete(cb.value);
-        facet.renderList();   // refresh checkbox state (list already re-filtered)
-        facet.renderChips();
-        renderFiltered();
-      });
-
-      // Remove a chip.
-      facet.chipsEl.addEventListener('click', (e) => {
-        const btn = e.target.closest('button[data-actor]');
-        if (!btn) return;
-        facet.selected.delete(btn.getAttribute('data-actor'));
-        facet.renderList();
-        facet.renderChips();
-        renderFiltered();
-      });
-
-      return facet;
-    }
-
-    const actorFacets = [
-      // Older payloads without the split fall back to the merged name list.
-      makeFacet({
-        pick:     r => r.people || r.actors || [],
-        input:    'person-input', list: 'person-list', chips: 'person-chips',
-        emptyMsg: 'No matching people.',
-      }),
-      makeFacet({
-        pick:     r => r.institutions || [],
-        input:    'institution-input', list: 'institution-list', chips: 'institution-chips',
-        emptyMsg: 'No matching institutions.',
-      }),
-    ];
-
-    function seedActorLists(results) {
-      actorFacets.forEach(f => f.seed(results));
-    }
-
-    // Delegate card clicks (works for re-rendered cards): "Show more/less"
-    // toggling stops propagation, any other click opens the detail page.
-    resultsEl.addEventListener('click', (e) => {
-      const toggle = e.target.closest('.toggle');
-      if (toggle) {
-        e.stopPropagation();
-        const card = toggle.closest('.card');
-        const open = card.classList.toggle('open');
-        toggle.textContent = open ? 'Show less' : 'Show more';
-        return;
-      }
-      const card = e.target.closest('.card');
-      if (card && card.dataset.eid) {
-        location.href = 'node.html?eid=' + encodeURIComponent(card.dataset.eid);
-      }
-    });
-
-    async function search() {
-      const query = qInput.value.trim();
-      if (!query) { qInput.focus(); return; }
-
-      // Always fetch the FULL result set (no server-side filter); the
-      // checkboxes filter this in-memory afterwards.
-      const payload = {
-        query,
-        source_k:    clampInt('source_k', 10),
-        final_k:     clampInt('final_k', 20),
-        rrf_constant: clampInt('rrf_constant', 60),
-      };
-
-      btn.disabled = true;
-      metaEl.textContent = '';
-      resultsEl.innerHTML = '<div class="loading">Searching\u2026</div>';
-
-      try {
-        const res = await fetch(API_BASE + '/search', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(payload),
-        });
-        if (!res.ok) throw new Error('HTTP ' + res.status + ' ' + res.statusText);
-        const data = await res.json();
-        lastQuery  = query;
-        allResults = data.results || [];
-        lastTimings = {
-          embedding_time_s: data.embedding_time_s,
-          search_time_s:    data.search_time_s,
-        };
-        seedActorLists(allResults);
-        // Route through the SAME filter chain as the checkbox toggles: the
-        // backend always returns every type (no `filters` in the payload),
-        // so the active client-side filters must be applied here too —
-        // otherwise the tickboxes and the shown results disagree until the
-        // user happens to toggle one.
-        renderFiltered();
-        saveSearchState();
-      } catch (err) {
-        metaEl.textContent = '';
-        resultsEl.innerHTML = '<div class="error">Search failed: ' + escapeHtml(String(err.message || err)) + '</div>';
-      } finally {
-        btn.disabled = false;
-      }
-    }
-
-    function clampInt(id, fallback) {
-      const v = document.getElementById(id).valueAsNumber;
-      return Number.isFinite(v) && v >= 1 ? Math.round(v) : fallback;
-    }
-
-    // Fulltext raw scores are BM25-like and unbounded; normalize to 0-1
-    // relative to the best/worst in this batch (mirrors query_util.format_scores).
-    function ftBounds(results) {
-      const scores = [];
-      results.forEach(r => r.sources.forEach((s, i) => { if (s === 'fulltext') scores.push(r.rawScores[i]); }));
-      return scores.length ? [Math.min(...scores), Math.max(...scores)] : [0, 1];
-    }
-
-    function scoreText(r, ftMin, ftMax) {
-      const parts = [];
-      r.sources.forEach((src, i) => {
-        const rank = r.sourceRanks[i];
-        const score = r.rawScores[i];
-        if (src === 'fulltext' && ftMax > ftMin) {
-          const norm = (score - ftMin) / (ftMax - ftMin);
-          parts.push(src + '#' + rank + ': ' + norm.toFixed(4) + ' (' + score.toFixed(4) + ')');
-        } else {
-          parts.push(src + '#' + rank + ': ' + score.toFixed(4));
-        }
-      });
-      return parts.join(', ');
-    }
-
-    // Card headline = C2 (English) when present; Rec/Gap/Project have no
-    // officialTitle, so they fall back to their body text.
-    function nameOf(r) {
-      return r.officialTitle || r.title || r.content || r.description || 'Unnamed result';
-    }
-
-    function truncate(s, maxLen) {
-      return String(s == null ? '' : s).length > maxLen
-        ? String(s).slice(0, maxLen - 1) + '\u2026'
-        : String(s == null ? '' : s);
-    }
-
-    // Preview is a truncated (CSS-clamped) glance; `.full` shows the whole text.
-    function previewText(r) {
-      if (r.type === 'Oggetto Informativo') return r.abstract || '';
-      if (r.type === 'Raccomandazione')    return r.content || r.title || '';
-      if (r.type === 'Lacuna')             return r.description || r.title || '';
-      if (r.type === 'Progetto')           return r.description || r.title || '';
-      return r.title || '';
-    }
-
-    function fullBody(r) {
-      if (r.type === 'Oggetto Informativo') {
-        return '<div class="field"><span class="flabel">Abstract:</span> ' + escapeHtml(r.abstract || '') + '</div>' +
-               '<div class="field"><span class="flabel">Findings:</span> ' + escapeHtml(r.findings || '') + '</div>';
-      }
-      if (r.type === 'Raccomandazione') {
-        return '<div class="field"><span class="flabel">Contenuto:</span> ' + escapeHtml(r.content || '') + '</div>' +
-               (r.motivation ? '<div class="field"><span class="flabel">Motivazione:</span> ' + escapeHtml(r.motivation) + '</div>' : '');
-      }
-      if (r.type === 'Lacuna') {
-        return '<div class="field"><span class="flabel">Descrizione:</span> ' + escapeHtml(r.description || '') + '</div>';
-      }
-      if (r.type === 'Progetto') {
-        return '<div class="field"><span class="flabel">Descrizione:</span> ' + escapeHtml(r.description || '') + '</div>';
-      }
-      return '<div class="field">' + escapeHtml(nameOf(r)) + '</div>';
-    }
-
-    function render(results, info) {
-      results = results || [];
-      info = info || {};
-      const total = (info.all || results).length;
-      const [ftMin, ftMax] = ftBounds(results);
-
-      var countText = String(results.length) + ' results';
-      if (total !== results.length) countText += ' (filtered from ' + total + ')';
-
-      metaEl.innerHTML =
-        'searched:<div class="meta-q">\u201C' + escapeHtml(lastQuery) + '\u201D</div>' +
-        '<div> got ' + countText + '</div>' +
-        '<div> took ' + (info.embedding_time_s ?? 0).toFixed(3) + 's to embed the query string</div>' +
-        '<div> took ' + (info.search_time_s ?? 0).toFixed(3) + 's to search the VCDB</div>';
-
-      if (!results.length) {
-        resultsEl.innerHTML = '<div class="empty">No results found.</div>';
-        return;
-      }
-
-      resultsEl.innerHTML = results.map((r) => {
-        const oiWord = r.type === 'Oggetto Informativo' ? formalBadge(r.formalType) : '';
-        const badgeClass = oiWord ? oiWord.toLowerCase()
-                                  : (BADGE_CLASS[r.type] || 'ft');
-        const badgeText  = (r.type === 'Oggetto Informativo')
-          ? (oiWord || 'OI')
-          : (BADGE_SHORT[r.type] || 'FT');
-        // Purpose, the full contributor list and db_id are deliberately NOT
-        // shown on the card (they live on the node page) so more results fit
-        // the viewport — only the first person and the year are.
-        const parentHtml = (r.type !== 'Oggetto Informativo') && r.parent_oi
-          ? '<div class="parent-row"><span class="plabel">OI:</span> ' +
-            escapeHtml(truncate(r.parent_oi.officialTitle || r.parent_oi.title, 120)) + '</div>'
-          : '';
-        // Reference person = the first contributing person (a result may have
-        // none: institutions only, or no actors at all). `r.people || r.actors`
-        // only falls back when the split is missing (older stored payloads),
-        // never when `people` is an empty list.
-        const refPerson = (r.people || r.actors || [])[0] || '';
-        const year = r.releaseYear || '';
-        const metaBits = [];
-        if (refPerson) metaBits.push('<span class="mlabel">Reference person:</span> ' + escapeHtml(truncate(refPerson, 80)));
-        if (year)      metaBits.push('<span class="mlabel">Year:</span> ' + escapeHtml(String(year)));
-        const metaHtml = metaBits.length
-          ? '<div class="card-meta">' + metaBits.join('<span class="msep">|</span>') + '</div>'
-          : '';
-        return '' +
-          '<div class="card" data-eid="' + escapeHtml(r.neo4j_id) + '">' +
-            '<div class="card-head">' +
-              '<span class="name">' + escapeHtml(truncate(nameOf(r), 180)) + '</span>' +
-              '<span class="badge ' + badgeClass + '">' + badgeIcon(badgeClass) + badgeText + '</span>' +
-            '</div>' +
-            '<div class="preview">' + escapeHtml(previewText(r)) + '</div>' +
-            '<div class="full">' + fullBody(r) + '</div>' +
-            '<button type="button" class="toggle">Show more</button>' +
-            metaHtml +
-            '<div class="scores"><b>WRRF ' + r.wrrf_score.toFixed(4) + '</b> | ' + scoreText(r, ftMin, ftMax) + '</div>' +
-            parentHtml +
-          '</div>';
-      }).join('');
-    }
-
-    function escapeHtml(s) {
-      return String(s == null ? '' : s).replace(/[&<>"']/g, c => ({
-        '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;',
-      }[c]));
-    }
-
-    // Bring the previous search back after Back/Forward or a page reload
-    // (bfcache eviction): renders from the stored results, no API call.
-    restoreSearchState();
-  </script>
+  <script type="module" src="js/search-page.js"></script>
 </body>
 </html>
