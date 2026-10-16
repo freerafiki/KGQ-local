@@ -896,8 +896,9 @@ def get_node_detail(element_id):
     """Full details of a single node + its document <-> Rec/Gap neighbourhood.
 
     Returns None if the node does not exist. Used by GET /node/{eid}.
-    Vector properties are summarised as their dimension (the raw 1024-float
-    arrays would bloat the payload); everything else is passed through.
+    Vector properties are summarised as their dimension (the raw float
+    arrays — 768 values for the current model — would bloat the payload);
+    everything else is passed through.
     """
     driver = get_driver()
 

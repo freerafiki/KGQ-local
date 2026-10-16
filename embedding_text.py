@@ -12,14 +12,25 @@ identity so query_config.py (model loader), export and import all agree.
 """
 
 # Identity of the embedding model. query_config.py loads THIS model name and
-# re-exports EMBEDDING_DIMS as `embedding_dims`; export_embeddings.py writes it
+# re-exports the model's AUTODETECTED dimension as `embedding_dims`
+# (cross-checked against EMBEDDING_DIMS below); export_embeddings.py writes it
 # into the JSON meta record and import_embeddings.py refuses files whose
 # meta does not match (wrong model/dims => incompatible vectors).
 # EMBEDDING_MODEL_NAME = "BAAI/bge-m3"
 # EMBEDDING_DIMS = 1024
 
 EMBEDDING_MODEL_NAME = "google/embeddinggemma-2"
-EMBEDDING_DIMS = 512
+# Native output width of the model above (len(model.encode(...)) == 768, and
+# model.get_sentence_embedding_dimension() == 768). insert_embeddings.py hands
+# it to Neo4j as `vector.dimensions` when creating the vector indexes, so a
+# stale value here does NOT fail at write time: the index comes up ONLINE but
+# indexes nothing, and every hybrid ("nl") search then dies with
+#   Vector index 'x' has a configured dimensionality of 512, but the provided
+#   vector has dimension 768.
+# query_config.py autodetects the width from the loaded model and warns loudly
+# when the two disagree; this constant stays as the model-free fallback for
+# export/import, which must run without sentence-transformers installed.
+EMBEDDING_DIMS = 768
 
 
 def _s(value):
