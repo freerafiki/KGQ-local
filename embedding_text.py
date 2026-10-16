@@ -15,8 +15,11 @@ identity so query_config.py (model loader), export and import all agree.
 # re-exports EMBEDDING_DIMS as `embedding_dims`; export_embeddings.py writes it
 # into the JSON meta record and import_embeddings.py refuses files whose
 # meta does not match (wrong model/dims => incompatible vectors).
-EMBEDDING_MODEL_NAME = "BAAI/bge-m3"
-EMBEDDING_DIMS = 1024
+# EMBEDDING_MODEL_NAME = "BAAI/bge-m3"
+# EMBEDDING_DIMS = 1024
+
+EMBEDDING_MODEL_NAME = "google/embeddinggemma-2"
+EMBEDDING_DIMS = 512
 
 
 def _s(value):

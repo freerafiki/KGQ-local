@@ -13,6 +13,7 @@ Future search strategies to implement here (and expose via new endpoints):
   - text2cypher              (LLM-generated Cypher over the graph)
 """
 
+import logging
 import os
 import re
 import time
@@ -21,6 +22,10 @@ from dotenv import load_dotenv
 from neo4j import GraphDatabase, RoutingControl
 
 from query_config import chooseSourceWeights, embedding_model
+
+# Same logger family as app.py ("kgq.api"), so uvicorn's handler shows these
+# lines with timestamps in the journal next to the request log.
+logger = logging.getLogger("kgq.query")
 
 load_dotenv()
 NEO4J_URI = os.getenv("NEO4J_URI")
@@ -75,6 +80,48 @@ _SOURCES_BY_LABEL = {
         ("project_embeddings", "queryVector", "project"),
     ],
 }
+
+# Every index the fragments above call BY NAME. A missing one only surfaces
+# as a Neo4j ClientError at the first search that needs it ("There is no such
+# fulltext schema index: ..."), so app.py checks this list at startup and
+# logs which ones the connected database lacks.
+EXPECTED_FULLTEXT_INDEXES = (
+    "search_fulltext",     # _fulltext_fragment  (nl, keywords)
+    "title_fulltext",      # _title_fragment     (title)
+    "authors_fulltext",    # _authors_fragment   (nl, author)
+)
+EXPECTED_VECTOR_INDEXES = tuple(
+    index
+    for entries in _SOURCES_BY_LABEL.values()
+    for index, _vec, _source in entries
+)
+
+
+def check_indexes():
+    """List the expected indexes this database is missing (read-only).
+
+    Returns a sorted list of index names the search pipeline needs but the
+    connected database does not have, or None when the check could not run
+    (database unreachable) — startup must not crash the API for that, the
+    driver is lazy on purpose and searches will report their own errors.
+    """
+    try:
+        driver = get_driver()
+        # execute_query returns (records, summary, keys); one record per index,
+        # each carrying just the `name` field.
+        fulltext_rows, _, _ = driver.execute_query(
+            "SHOW FULLTEXT INDEXES YIELD name RETURN name")
+        vector_rows, _, _ = driver.execute_query(
+            "SHOW VECTOR INDEXES YIELD name RETURN name")
+        fulltext = {row["name"] for row in fulltext_rows}
+        vector = {row["name"] for row in vector_rows}
+    except Exception as exc:
+        logger.warning("index check failed: %s: %s", type(exc).__name__, exc)
+        return None
+    missing = [name for name in EXPECTED_FULLTEXT_INDEXES if name not in fulltext]
+    missing += [name for name in EXPECTED_VECTOR_INDEXES if name not in vector]
+    return sorted(missing)
+
 
 SEARCH_MODES = ("nl", "keywords", "title", "author")
 
@@ -158,6 +205,13 @@ WITH row, n, mainPurposeNames, oiParent,
      [ (oiParent)-[rpm:has_main_function]->(p:Purpose) | p.name ] AS parentMainPurposeNames,
      [ (ca:ContributionActor)-[rc:contributed_to]->(n) | {name: ca.name, type: ca.type} ]
      + [ (ca2:ContributionActor)-[rc2:project_contributor]->(n) | {name: ca2.name, type: ca2.type} ] AS actorEntries
+WITH row, n, mainPurposeNames, parentMainPurposeNames, oiParent, actorEntries,
+     [ (n)-[:describes]->(p:Phenomenon) | p.name ] AS phenomenonNames,
+     [ (n)-[:has_as_main_topic]->(t:Topic) | t.name ] AS topicNames,
+     [ (n)-[:refers_to_geographic_area]->(g:GeographicArea) | g.name ] AS geoAreaNames,
+     [ (oiParent)-[:describes]->(p:Phenomenon) | p.name ] AS parentPhenomenonNames,
+     [ (oiParent)-[:has_as_main_topic]->(t:Topic) | t.name ] AS parentTopicNames,
+     [ (oiParent)-[:refers_to_geographic_area]->(g:GeographicArea) | g.name ] AS parentGeoAreaNames
 RETURN
     n AS n,
     n.title AS title,
@@ -185,6 +239,12 @@ RETURN
     head([(oiParent)-[:has_formal_type]->(pft:FormalType) | properties(pft)]) AS parentFormalTypeProps,
     parentMainPurposeNames AS parentMainPurposeNames,
     actorEntries AS actorEntries,
+    phenomenonNames AS phenomenonNames,
+    topicNames AS topicNames,
+    geoAreaNames AS geoAreaNames,
+    parentPhenomenonNames AS parentPhenomenonNames,
+    parentTopicNames AS parentTopicNames,
+    parentGeoAreaNames AS parentGeoAreaNames,
     head([(n)-[:has_formal_type]->(ft:FormalType) | properties(ft)]) AS formalTypeProps,
     row.wrrf AS wrrf
 ORDER BY row.wrrf DESC, n.id ASC;
@@ -391,6 +451,17 @@ def _purpose_labels(names):
     return labels
 
 
+def _unique_names(*groups):
+    """Order-preserving union of name lists: own values first, then parents'."""
+    seen, out = set(), []
+    for group in groups:
+        for name in group or []:
+            if name and name not in seen:
+                seen.add(name)
+                out.append(name)
+    return out
+
+
 def _split_actors(entries):
     """Unique actor names, plus the same names split by ContributionActor.type.
 
@@ -450,6 +521,16 @@ def _serialize(record):
             record['mainPurposeNames']
             + record['parentMainPurposeNames']
         ),
+        # A5 Phenomenon, B3 Topic and C8a2 GeographicArea: three closed
+        # vocabularies feeding the checkbox filters on the search page. Like
+        # purposes, Rec/Gap nodes carry none of their own and inherit the
+        # values of the OI they belong to; Projects have none at all.
+        "phenomena": _unique_names(record['phenomenonNames'],
+                                   record['parentPhenomenonNames']),
+        "topics": _unique_names(record['topicNames'],
+                                record['parentTopicNames']),
+        "geographicAreas": _unique_names(record['geoAreaNames'],
+                                         record['parentGeoAreaNames']),
         "actors": actors,
         # Contributor filters: people and institutions, kept apart.
         "people": people,

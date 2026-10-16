@@ -52,6 +52,84 @@ export const PURPOSE_ENTRIES = [
   { value: 'Gap di conoscenza',  dot: 'pv-gap', desc: 'Evidenzia un limite o un gap di conoscenza' },
 ];
 
+// The other three multiple-choice axes of the OI form: A5 Phenomenon, B3
+// Topic and C8a2 GeographicArea. `values` are the EXACT node names the
+// payload carries (query_util._serialize puts them under `field`: the node's
+// own values first, then its parent OI's — which is what gives Rec/Gap their
+// tags, since only Contributions answer these questions). `key` names both
+// the checkbox map on the store and its count bucket; `param` is the
+// deep-link parameter the group reads and writes.
+//
+// Same semantics as Main purpose: every box ticked by default, OR inside a
+// group, AND across groups — and a result with NO value on an axis
+// ("untagged": Projects, plus the ~400 OIs that never answered A5) always
+// passes that axis.
+export const TAXONOMY_GROUPS = [
+  {
+    key: 'phenomena', param: 'phenomenon', field: 'phenomena',
+    title: 'Phenomena', dot: 'tx-phen',
+    values: [
+      'Acqua alta e allagamenti',
+      'Assetto urbano e territorio',
+      'Attività economiche',
+      'Biodiversità',
+      'Clima e variabili climatiche',
+      'Dati',
+      'Dinamica mareale e surge',
+      'Ecosistemi lagunari',
+      'Infrastrutture e opere',
+      'Innalzamento del livello del mare',
+      'Popolazione e attività umane',
+      'Processi decisionali e governance',
+      'Qualità delle acque',
+      'Salute e benessere',
+      'Sedimenti e morfologia lagunare',
+      'Subsidenza',
+      'monitoraggio e sistemi informativi',
+    ],
+  },
+  {
+    key: 'topics', param: 'topic', field: 'topics',
+    title: 'Topic', dot: 'tx-topic',
+    values: [
+      'Acque / maree / livello del mare',
+      'Adattamento ai cambiamenti climatici',
+      'Clima e meteo',
+      'Energia ed emissioni',
+      'Governance e gestione',
+      'Infrastrutture e opere',
+      'Rischi e impatti',
+      'Società ed economia',
+      'Territorio e uso del suolo',
+      'other: Livello del mare e cicli glaciali-interglaciali',
+    ],
+  },
+  {
+    key: 'geoAreas', param: 'area', field: 'geographicAreas',
+    title: 'Geographic area', dot: 'tx-geo',
+    values: [
+      'Adriatico',
+      'Bacino idrografico / distretto idrografico',
+      'Bacino scolante della Laguna di Venezia',
+      'Fascia costiera',
+      'Laguna di Venezia',
+      'Mare prospiciente',
+      'Terraferma veneziana',
+    ],
+  },
+];
+
+// One checkbox entry per value; all boxes of a group share its dot colour.
+for (const group of TAXONOMY_GROUPS) {
+  group.entries = group.values.map(value => ({ value, dot: group.dot }));
+}
+
+// Every box of a list starts ticked (the "unchecking hides what carries it"
+// behaviour the checkbox filters are built on).
+function tickAll(values) {
+  return Object.fromEntries(values.map(v => [v, true]));
+}
+
 // Name order for the People facet: compare the LAST word of each name so
 // authors list by surname ("Ada Rossi" sorts under Rossi). The full name is
 // the tie-break, keeping same-surname authors in given-name order; the
@@ -116,6 +194,9 @@ export const store = reactive({
   formal:   Object.fromEntries(FORMAL_ENTRIES.map(e => [e.value, true])),
   types:    Object.fromEntries(TYPE_ENTRIES.map(e => [e.value, true])),
   purposes: Object.fromEntries(PURPOSE_ENTRIES.map(e => [e.value, true])),
+  // Phenomena / Topic / Geographic area: one checkbox map per taxonomy
+  // group, every value ticked (see TAXONOMY_GROUPS).
+  ...Object.fromEntries(TAXONOMY_GROUPS.map(g => [g.key, tickAll(g.values)])),
   facets: {
     person:      { query: '', selected: [] },
     institution: { query: '', selected: [] },
@@ -175,15 +256,19 @@ export const yearDomain = computed(() => {
 
 // ---- Filter entry counts ---------------------------------------------------
 
-// How many results the CURRENT result set holds per entry, for the three
-// checkbox groups (Doc Type, Include also, Main purpose). Counted over the
-// WHOLE set — the numbers stay stable while other filters are toggled and
-// only change with a new search (the user-facing meaning: "we have 33
-// Papers" in this result set).
+// How many results the CURRENT result set holds per entry, for the checkbox
+// groups (Doc Type, Include also, Main purpose, Phenomena, Topic, Geographic
+// area). Counted over the WHOLE set — the numbers stay stable while other
+// filters are toggled and only change with a new search (the user-facing
+// meaning: "we have 33 Papers" in this result set).
 export const filterCounts = computed(() => {
   const formal = Object.fromEntries(FORMAL_ENTRIES.map(e => [e.value, 0]));
   const type = Object.fromEntries(TYPE_ENTRIES.map(e => [e.value, 0]));
   const purpose = Object.fromEntries(PURPOSE_ENTRIES.map(e => [e.value, 0]));
+  const counts = { formal, type, purpose };
+  for (const g of TAXONOMY_GROUPS) {
+    counts[g.key] = Object.fromEntries(g.values.map(v => [v, 0]));
+  }
   for (const r of store.results) {
     if (r.type === 'Oggetto Informativo') {
       const word = formalBadge(r.formalType);
@@ -193,8 +278,13 @@ export const filterCounts = computed(() => {
       if (entry) type[entry.value] += 1;
     }
     for (const p of r.purposes || []) if (p in purpose) purpose[p] += 1;
+    // Taxonomy axes: values NOT in the checkbox list (a name that appeared
+    // in the graph after this UI shipped) are simply not counted.
+    for (const g of TAXONOMY_GROUPS) {
+      for (const v of r[g.field] || []) if (v in counts[g.key]) counts[g.key][v] += 1;
+    }
   }
-  return { formal, type, purpose };
+  return counts;
 });
 
 // Both constraints apply when set: a live-typed query (substring) and the
@@ -231,6 +321,9 @@ export const visibleResults = computed(() => {
   const typeActive    = TYPE_ENTRIES.filter(e => store.types[e.value]).map(e => e.type);
   const formalActive  = FORMAL_ENTRIES.filter(e => store.formal[e.value]).map(e => e.value);
   const purposeActive = PURPOSE_ENTRIES.filter(e => store.purposes[e.value]).map(e => e.value);
+  // Phenomena / Topic / Geographic area: the ticked values per group.
+  const taxonomyActive = Object.fromEntries(
+    TAXONOMY_GROUPS.map(g => [g.key, g.values.filter(v => store[g.key][v])]));
 
   // Time: the bounds default to the full year range of this result set;
   // docs with no releaseYear follow the "show docs without year" checkbox.
@@ -254,6 +347,11 @@ export const visibleResults = computed(() => {
     }
     if (!typeOk) return false;
     if (!passesAxis(r.purposes || [], purposeActive)) return false;
+    // The taxonomy facets are three more independent axes (AND across
+    // groups, OR inside one), same rule as the purpose filter.
+    for (const g of TAXONOMY_GROUPS) {
+      if (!passesAxis(r[g.field] || [], taxonomyActive[g.key])) return false;
+    }
     if (dom.min !== null) {
       const y = yearOf(r);
       if (y !== null) {

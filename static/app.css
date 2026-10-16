@@ -32,6 +32,10 @@
       --pv-sup: #12b5cb;   /* Supporto         - cyan    */
       --pv-gov: #78909c;   /* Governance       - slate   */
       --pv-gap: #fa7b17;   /* Gap conoscenza   - orange  */
+      /* Taxonomy tier: A5 Phenomenon, B3 Topic, C8a2 Geographic area */
+      --tx-phen: #7986cb;  /* Phenomena        - indigo  */
+      --tx-topic: #9575cd; /* Topic            - purple  */
+      --tx-geo: #4db6ac;   /* Geographic area  - teal    */
     }
     * { box-sizing: border-box; }
     html, body { height: 100%; }
@@ -183,6 +187,11 @@
     .dot.pv-sup { background: var(--pv-sup); }
     .dot.pv-gov { background: var(--pv-gov); }
     .dot.pv-gap { background: var(--pv-gap); }
+    /* Taxonomy facet tiers: A5 Phenomenon, B3 Topic, C8a2 Geographic area.
+       Same muted mid-tone register as the purpose tier. */
+    .dot.tx-phen { background: var(--tx-phen); }
+    .dot.tx-topic { background: var(--tx-topic); }
+    .dot.tx-geo { background: var(--tx-geo); }
     /* Search summary, shown under the Filters card in the left column:
        one fact per line. The separator belongs to the title so the whole
        block (title + lines + footer) reads as one section. */

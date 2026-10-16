@@ -124,6 +124,19 @@
           <actor-facet facet="person"></actor-facet>
           <actor-facet facet="institution"></actor-facet>
 
+          <!-- Phenomena (A5), Topic (B3) and Geographic area (C8a2): the
+               other multiple-choice axes of the OI form, rendered from
+               TAXONOMY_GROUPS in js/state.js. Same checkbox shape as Main
+               purpose — every box ticked, OR inside a group, AND across
+               groups — with the entry count of the current result set in
+               brackets. -->
+          <details class="filter-group" v-for="g in taxonomyGroups" :key="g.key">
+            <summary>{{ g.title }}</summary>
+            <div class="group-body">
+              <label class="chk" v-for="v in g.entries" :key="v.value"><input type="checkbox" v-model="taxonomy[g.key][v.value]"> <span class="dot" :class="v.dot"></span><span class="chk-text">{{ v.value }} ({{ counts[g.key][v.value] }})</span></label>
+            </div>
+          </details>
+
           <details class="filter-group">
             <summary>Advanced parameters</summary>
             <div class="group-body adv-body">

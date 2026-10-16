@@ -10,6 +10,7 @@ import {
 import {
   store, visibleResults, groupedResults, saveState, restoreState, pruneFacets,
   FORMAL_ENTRIES, PROJECT_ENTRIES, INCLUDE_ENTRIES, PURPOSE_ENTRIES,
+  TAXONOMY_GROUPS,
   MODE_ENTRIES, isMode, modeLabel, yearDomain, filterCounts,
 } from './state.js';
 import { fetchSearch } from './api.js';
@@ -17,10 +18,10 @@ import { ftBounds, clampInt } from './dom.js';
 import ResultCard from './components/result-card.js';
 import ActorFacet from './components/actor-facet.js';
 
-// Deep links (?q=...&mode=...&purpose=...&docType=...&include=...): used by
-// the node page ("search this author", drill-down from a purpose/doc-type
-// chip) and by shared URLs. An unknown mode is ignored, so old links stay
-// safe.
+// Deep links (?q=...&mode=...&purpose=...&docType=...&include=... plus the
+// ?phenomenon=, ?topic= and ?area= taxonomy params): used by the node page
+// ("search this author", drill-down from a purpose/doc-type chip) and by
+// shared URLs. An unknown mode is ignored, so old links stay safe.
 function readUrlQuery() {
   const params = new URLSearchParams(location.search);
   const mode = params.get('mode');
@@ -29,6 +30,11 @@ function readUrlQuery() {
     q,
     mode: isMode(mode) ? mode : '',
     purposes: readListParam(params, 'purpose', PURPOSE_ENTRIES.map(e => e.value)),
+    // Phenomena / Topic / Geographic area: one param per taxonomy group
+    // (?phenomenon=, ?topic=, ?area=), values matched against the group's
+    // own list — see TAXONOMY_GROUPS in state.js.
+    ...Object.fromEntries(
+      TAXONOMY_GROUPS.map(g => [g.key, readListParam(params, g.param, g.values)])),
     docTypes: readListParam(params, 'docType',
       [...FORMAL_ENTRIES, ...PROJECT_ENTRIES].map(e => e.value)),
     includes: readListParam(params, 'include', INCLUDE_ENTRIES.map(e => e.value)),
@@ -66,6 +72,11 @@ function applyUrlFilters(url) {
   if (url.purposes) {
     for (const e of PURPOSE_ENTRIES) store.purposes[e.value] = url.purposes.includes(e.value);
   }
+  for (const g of TAXONOMY_GROUPS) {
+    const picked = url[g.key];
+    if (!picked) continue;             // absent param: that group stays as it is
+    for (const v of g.values) store[g.key][v] = picked.includes(v);
+  }
   if (url.docTypes) {
     for (const e of FORMAL_ENTRIES) store.formal[e.value] = url.docTypes.includes(e.value);
     for (const e of PROJECT_ENTRIES) store.types[e.value] = url.docTypes.includes(e.value);
@@ -90,6 +101,10 @@ function syncUrl() {
   // toggling a box alone does not touch the URL yet.)
   const purposes = PURPOSE_ENTRIES.filter(e => store.purposes[e.value]).map(e => e.value);
   if (purposes.length !== PURPOSE_ENTRIES.length) params.set('purpose', purposes.join(','));
+  for (const g of TAXONOMY_GROUPS) {
+    const picked = g.values.filter(v => store[g.key][v]);
+    if (picked.length !== g.values.length) params.set(g.param, picked.join(','));
+  }
   const docTypes = [
     ...FORMAL_ENTRIES.filter(e => store.formal[e.value]).map(e => e.value),
     ...PROJECT_ENTRIES.filter(e => store.types[e.value]).map(e => e.value),
@@ -258,6 +273,11 @@ const SearchPage = {
       projectEntries: PROJECT_ENTRIES,
       includeEntries: INCLUDE_ENTRIES,
       purposeEntries: PURPOSE_ENTRIES,
+      // The three taxonomy facets (Phenomena, Topic, Geographic area): the
+      // template renders them from the group descriptors, `taxonomy` is the
+      // store itself so each box v-models store[group.key][value].
+      taxonomyGroups: TAXONOMY_GROUPS,
+      taxonomy: store,
       modeEntries: MODE_ENTRIES,
       visible: visibleResults,
       groups: groupedResults,

@@ -24,6 +24,8 @@ import time
 
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
+from neo4j.exceptions import ServiceUnavailable, SessionExpired
 from pydantic import BaseModel, Field
 from typing import Literal
 from prometheus_fastapi_instrumentator import Instrumentator
@@ -62,8 +64,19 @@ class SearchRequest(BaseModel):
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # Startup: nothing to do — the embedding model is loaded at import time
-    # (query_config.py) and the Neo4j driver is created lazily on first use.
+    # Startup: the embedding model is loaded at import time (query_config.py)
+    # and the Neo4j driver is created lazily on first use — so the only thing
+    # checked here is the index inventory: a missing index otherwise surfaces
+    # as an opaque Neo4j error at the first search that needs it.
+    missing = query_util.check_indexes()
+    if missing is None:
+        logger.warning("index check skipped: database not reachable")
+    elif missing:
+        logger.warning("database is missing %d index(es) the search expects: %s "
+                       "(inspect with SHOW FULLTEXT INDEXES / SHOW VECTOR INDEXES)",
+                       len(missing), ", ".join(missing))
+    else:
+        logger.info("index check OK: all expected fulltext/vector indexes present")
     yield
     # Shutdown: close the Neo4j connection pool while uvicorn is still
     # draining, instead of letting the sockets die with the process.
@@ -102,6 +115,30 @@ async def timing_middleware(request: Request, call_next):
 Instrumentator().instrument(app).expose(app, include_in_schema=False)
 
 
+def server_error(exc: Exception) -> JSONResponse:
+    """A 5xx as JSON, returned from INSIDE the endpoint.
+
+    Starlette renders an unhandled exception in its outermost middleware
+    (ServerErrorMiddleware), which sits OUTSIDE CORSMiddleware: the browser
+    then receives a 500 with no `Access-Control-Allow-Origin` header and
+    reports a confusing "Cross-Origin Request Blocked" error instead of the
+    real failure. A response returned by the endpoint itself travels back
+    through the CORS layer and keeps the header, so the real error reaches
+    the caller (and the UI's error banner) intact.
+
+    Detail = exception type + message, capped so a pathological failure
+    cannot dump an unbounded blob into the response body.
+    """
+    kind = ("service unavailable" if isinstance(exc, (ServiceUnavailable, SessionExpired))
+            else "internal error")
+    detail = f"{type(exc).__name__}: {exc}"[:500]
+    logger.error("%s: %s", kind, detail)
+    return JSONResponse(
+        status_code=503 if kind == "service unavailable" else 500,
+        content={"detail": detail},
+    )
+
+
 @app.get("/health")
 def health():
     return {"status": "ok"}
@@ -125,14 +162,19 @@ def search(req: SearchRequest):
                 query_preview, req.mode, req.source_k, req.final_k, req.rrf_constant,
                 ", types=" + ",".join(types) if types else "")
 
-    result = query_util.run_search(
-        req.query,
-        source_k=req.source_k,
-        final_k=req.final_k,
-        rrf_constant=req.rrf_constant,
-        types=types,
-        mode=req.mode,
-    )
+    try:
+        result = query_util.run_search(
+            req.query,
+            source_k=req.source_k,
+            final_k=req.final_k,
+            rrf_constant=req.rrf_constant,
+            types=types,
+            mode=req.mode,
+        )
+    except Exception as exc:
+        # JSON from inside the endpoint, not an unhandled exception: see
+        # server_error() for why that matters to a cross-origin browser.
+        return server_error(exc)
     total = time.perf_counter() - started
     logger.info("search DONE q=%r embed=%.3fs neo4j=%.3fs total=%.3fs n=%d",
                 query_preview, result["embedding_time_s"],
@@ -146,7 +188,12 @@ def node_detail(eid: str):
     Full properties of one node + its document <-> Rec/Gap neighbourhood.
     This is used for discovering/exploring single results after the search
     """
-    detail = query_util.get_node_detail(eid)
+    try:
+        detail = query_util.get_node_detail(eid)
+    except Exception as exc:
+        # JSON from inside the endpoint, not an unhandled exception: see
+        # server_error() for why that matters to a cross-origin browser.
+        return server_error(exc)
     if detail is None:
         raise HTTPException(status_code=404, detail=f"Node not found: {eid}")
     logger.info("node detail eid=%s", eid)
