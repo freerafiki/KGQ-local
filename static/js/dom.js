@@ -101,19 +101,27 @@ export function ftBounds(results) {
   return scores.length ? [Math.min(...scores), Math.max(...scores)] : [0, 1];
 }
 
-export function scoreText(r, ftMin, ftMax) {
-  const parts = [];
-  r.sources.forEach((src, i) => {
+// One entry per source: its text plus whether the hit passed that branch's
+// relevance threshold (`passed` from the API; absent on old saved results =>
+// treated as passed). The card greys out the failing ones, which shows at a
+// glance why a result landed in the "possibly unrelated" tier.
+export function scoreParts(r, ftMin, ftMax) {
+  return r.sources.map((src, i) => {
     const rank = r.sourceRanks[i];
     const score = r.rawScores[i];
+    let text;
     if (src === 'fulltext' && ftMax > ftMin) {
       const norm = (score - ftMin) / (ftMax - ftMin);
-      parts.push(src + '#' + rank + ': ' + norm.toFixed(4) + ' (' + score.toFixed(4) + ')');
+      text = src + '#' + rank + ': ' + norm.toFixed(4) + ' (' + score.toFixed(4) + ')';
     } else {
-      parts.push(src + '#' + rank + ': ' + score.toFixed(4));
+      text = src + '#' + rank + ': ' + score.toFixed(4);
     }
+    return { text, passed: !r.passed || r.passed[i] !== false };
   });
-  return parts.join(', ');
+}
+
+export function scoreText(r, ftMin, ftMax) {
+  return scoreParts(r, ftMin, ftMax).map(p => p.text).join(', ');
 }
 
 // Numeric parameter from a (possibly emptied/typed-over) input: rounded when

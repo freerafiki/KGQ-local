@@ -163,6 +163,7 @@
             <div> showing {{ countText }}</div>
             <div> took {{ embedTime }}s to embed the query string</div>
             <div> took {{ searchTime }}s to search the VCDB</div>
+            <div v-if="timings.rerank_time_s"> took {{ rerankTime }}s to rerank the top results</div>
           </template>
         </div>
         <footer>KGQ search prototype</footer>
@@ -179,10 +180,28 @@
               <!-- A group = a parent document's card plus its Rec/Gap children
                    nested underneath; a result without a visible parent is a
                    group with no children. -->
-              <template v-for="g in groups" :key="g.key">
+              <!-- Strong results first; the "far" tier (results that did
+                   not pass the relevance thresholds, see query_config.py)
+                   stays behind the toggle below. -->
+              <div v-if="!strongGroups.length" class="empty">No strongly related results.</div>
+              <template v-for="g in strongGroups" :key="g.key">
                 <result-card v-if="g.root" :result="g.root" :ft-min="ft[0]" :ft-max="ft[1]" @open="openNode"></result-card>
                 <div v-if="g.children.length" class="child-group">
                   <result-card v-for="c in g.children" :key="c.neo4j_id" :result="c" :nested="!!g.root" :ft-min="ft[0]" :ft-max="ft[1]" @open="openNode"></result-card>
+                </div>
+              </template>
+              <template v-if="farGroups.length">
+                <button type="button" class="far-toggle" :aria-expanded="showFar"
+                        @click="showFar = !showFar">
+                  {{ showFar ? 'Hide possibly unrelated results' : 'Show more, possibly unrelated results (' + farCount + ')' }}
+                </button>
+                <div v-if="showFar" class="far-results">
+                  <template v-for="g in farGroups" :key="g.key">
+                    <result-card v-if="g.root" :result="g.root" :ft-min="ft[0]" :ft-max="ft[1]" @open="openNode"></result-card>
+                    <div v-if="g.children.length" class="child-group">
+                      <result-card v-for="c in g.children" :key="c.neo4j_id" :result="c" :nested="!!g.root" :ft-min="ft[0]" :ft-max="ft[1]" @open="openNode"></result-card>
+                    </div>
+                  </template>
                 </div>
               </template>
             </template>

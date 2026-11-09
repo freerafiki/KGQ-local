@@ -42,6 +42,7 @@ from embedding_text import (
     FIELD_STATUS,
     EMBEDDING_MODEL_NAME,
     EMBEDDING_DIMS,
+    USE_EMBEDDING_PROMPTS,
 )
 
 load_dotenv()
@@ -67,10 +68,14 @@ def import_embeddings(in_path: str) -> None:
     if meta is None:
         print(f"WARNING: {in_path} has no meta record (old export format): "
               f"cannot verify compatibility, assuming {EMBEDDING_MODEL_NAME} / {EMBEDDING_DIMS}")
-    elif meta.get("model") != EMBEDDING_MODEL_NAME or meta.get("dims") != EMBEDDING_DIMS:
+    elif (meta.get("model") != EMBEDDING_MODEL_NAME or meta.get("dims") != EMBEDDING_DIMS
+          # Exports older than the flag were all made without prompts.
+          or bool(meta.get("prompts", False)) != USE_EMBEDDING_PROMPTS):
         print("ABORT: export metadata does not match this machine:")
-        print(f"  file:  model={meta.get('model')} dims={meta.get('dims')}")
-        print(f"  local: model={EMBEDDING_MODEL_NAME} dims={EMBEDDING_DIMS}")
+        print(f"  file:  model={meta.get('model')} dims={meta.get('dims')} "
+              f"prompts={bool(meta.get('prompts', False))}")
+        print(f"  local: model={EMBEDDING_MODEL_NAME} dims={EMBEDDING_DIMS} "
+              f"prompts={USE_EMBEDDING_PROMPTS}")
         print("Vectors from a different model/dimension are incompatible. "
               "Re-export with the matching model, or re-run insert_embeddings.py to recompute.")
         return

@@ -4,7 +4,7 @@
 import { computed, ref } from '../../vendor/vue.esm-browser.prod.js';
 import {
   BADGE_CLASS, BADGE_SHORT, formalBadge, nameOf, truncate,
-  previewText, fullFields, scoreText,
+  previewText, fullFields, scoreParts,
 } from '../dom.js';
 
 export default {
@@ -87,11 +87,17 @@ export default {
       (showParent.value && WHY_TEXT[props.result.type]) || '');
 
     const wrrf = computed(() => Number(props.result.wrrf_score).toFixed(4));
-    const scoreLine = computed(() => scoreText(props.result, props.ftMin, props.ftMax));
+    // Cross-encoder score (0-1, the tier decision when present); null when
+    // the result was not reranked (author mode, reranker off, beyond top-N).
+    const rerankScore = computed(() => {
+      const s = props.result.rerank_score;
+      return (s === null || s === undefined) ? '' : Number(s).toFixed(3);
+    });
+    const scoreLine = computed(() => scoreParts(props.result, props.ftMin, props.ftMax));
 
     return {
       open, badgeClass, badgeText, name, preview, fields,
-      metaBits, showParent, parentTitle, parentType, whyText, wrrf, scoreLine,
+      metaBits, showParent, parentTitle, parentType, whyText, wrrf, rerankScore, scoreLine,
     };
   },
   template: `
@@ -102,7 +108,7 @@ export default {
   <div class="full"><div v-for="f in fields" :key="f.label" class="field"><span v-if="f.label" class="flabel">{{ f.label }}</span> {{ f.text }}</div></div>
   <button type="button" class="toggle" @click.stop="open = !open">{{ open ? 'Show less' : 'Show more' }}</button>
   <div v-if="metaBits.length" class="card-meta"><template v-for="(bit, i) in metaBits" :key="bit.label"><span v-if="i" class="msep">|</span><span class="mlabel">{{ bit.label }}</span> {{ bit.text }}</template></div>
-  <div class="scores"><b>WRRF {{ wrrf }}</b> | {{ scoreLine }}</div>
+  <div class="scores"><template v-if="rerankScore"><b>RERANK {{ rerankScore }}</b> | </template><b>WRRF {{ wrrf }}</b> | <template v-for="(p, i) in scoreLine" :key="i"><template v-if="i">, </template><span :class="{ fail: !p.passed }" :title="p.passed ? 'passed the relevance threshold' : 'below the relevance threshold'">{{ p.text }}</span></template></div>
   <div v-if="whyText" class="why-row">{{ whyText }}</div>
 </div>
 `,

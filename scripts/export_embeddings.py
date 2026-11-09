@@ -33,7 +33,9 @@ import sys
 from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from embedding_text import TEXT_BUILDERS, EMBEDDING_MODEL_NAME, EMBEDDING_DIMS
+from embedding_text import (
+    TEXT_BUILDERS, EMBEDDING_MODEL_NAME, EMBEDDING_DIMS, USE_EMBEDDING_PROMPTS,
+)
 
 load_dotenv()
 NEO4J_URI = os.getenv("NEO4J_URI")
@@ -54,6 +56,9 @@ def export(out_path: str) -> None:
             json.dump({"meta": {
                 "model": EMBEDDING_MODEL_NAME,
                 "dims": EMBEDDING_DIMS,
+                # Same text (=> same sha256 join key) but different vectors
+                # with/without task prompts: import refuses a mismatch.
+                "prompts": USE_EMBEDDING_PROMPTS,
                 "created": datetime.now().isoformat(timespec="seconds"),
             }}, fh)
             first = False

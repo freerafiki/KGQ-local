@@ -10,7 +10,7 @@ import sys
 from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from query_config import embedding_dims, embedding_model
+from query_config import embedding_dims, encode_document
 from embedding_text import (
     contribution_description_text,
     contribution_title_text,
@@ -159,7 +159,7 @@ for j, row in enumerate(tqdm(demb_records, desc="Embedding descriptions", unit="
         contributions_descr_embeddings.append({
     	'id':row['id'],
         'neo4j_id': row['n4j_id'],
-    	'descr_embedding':embedding_model.encode(description_text),
+    	'descr_embedding':encode_document(description_text),
     })
 print(f"Prepared {len(contributions_descr_embeddings)} title embeddings from {len(demb_records)} contributions")   # should be ~2 * len(title_rows) (embedding + status)
 done_descr_records, summary, keys = driver.execute_query("""
@@ -183,7 +183,7 @@ for j, row in enumerate(tqdm(temb_records, desc="Embedding titles", unit="node")
         contributions_title_embeddings.append({
     	'id':row['id'],
         'neo4j_id': row['n4j_id'],
-    	'title_embedding':embedding_model.encode(contribution_title_text(row['title'])),
+    	'title_embedding':encode_document(contribution_title_text(row['title'])),
     })
 print(f"Prepared {len(contributions_title_embeddings)} title embeddings from {len(temb_records)} contributions")   # should be ~2 * len(title_rows) (embedding + status)
 records, summary, keys = driver.execute_query("""
@@ -207,7 +207,7 @@ for j, row in enumerate(tqdm(semb_records, desc="Embedding subtitles", unit="nod
         contributions_subtitle_embeddings.append({
     	'id':row['id'],
         'neo4j_id': row['n4j_id'],
-    	'subtitle_embedding':embedding_model.encode(contribution_subtitle_text(row['subtitle'])),
+    	'subtitle_embedding':encode_document(contribution_subtitle_text(row['subtitle'])),
     })
 print(f"Prepared {len(contributions_subtitle_embeddings)} subtitle embeddings from {len(semb_records)} contributions")   # should be ~2 * len(title_rows) (embedding + status)
 records, summary, keys = driver.execute_query("""
@@ -292,7 +292,7 @@ for row in tqdm(records, desc="Embedding recommendations", unit="node"):
         recommendations_embeddings.append({
             'id':r_id,
             'neo4j_id': neo4j_id,
-            'embedding':embedding_model.encode(text_to_embed)
+            'embedding':encode_document(text_to_embed)
         })
 
 print(f"Setting recommendations node properties ({len(recommendations_embeddings)} recommendations embedded)")
@@ -350,7 +350,7 @@ for row in tqdm(records, desc="Embedding gaps", unit="node"):
         gap_embeddings.append({
 			'id':r_id,
             'neo4j_id': neo4j_id,
-			'embedding':embedding_model.encode(text_to_embed)
+			'embedding':encode_document(text_to_embed)
 		})
 
 print(f"Actually managed to embed {len(gap_embeddings)} gaps (others were empty)")
@@ -413,7 +413,7 @@ for row in tqdm(records, desc="Embedding project descriptions", unit="node"):
         project_embeddings.append({
             'id': p_id,
             'neo4j_id': neo4j_id,
-            'embedding': embedding_model.encode(text_to_embed)
+            'embedding': encode_document(text_to_embed)
         })
 
 print(f"Setting project node properties ({len(project_embeddings)} projects embedded)")

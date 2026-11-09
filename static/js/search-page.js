@@ -8,7 +8,8 @@ import {
   createApp, computed, onMounted, ref, toRefs,
 } from '../vendor/vue.esm-browser.prod.js';
 import {
-  store, visibleResults, groupedResults, saveState, restoreState, pruneFacets,
+  store, visibleResults, groupedResults, strongGroups, farGroups, farCount,
+  saveState, restoreState, pruneFacets,
   FORMAL_ENTRIES, PROJECT_ENTRIES, INCLUDE_ENTRIES, PURPOSE_ENTRIES,
   TAXONOMY_GROUPS,
   MODE_ENTRIES, isMode, modeLabel, yearDomain, filterCounts,
@@ -174,6 +175,7 @@ const SearchPage = {
     });
     const embedTime = computed(() => (store.timings.embedding_time_s || 0).toFixed(3));
     const searchTime = computed(() => (store.timings.search_time_s || 0).toFixed(3));
+    const rerankTime = computed(() => (store.timings.rerank_time_s || 0).toFixed(3));
 
     // "searched:" / "searched in Title:" — the mode comes from the server
     // echo, so the summary states what actually ran.
@@ -205,9 +207,11 @@ const SearchPage = {
         store.submittedQuery = query;
         store.submittedMode = data.mode || store.mode;
         store.results = data.results || [];
+        store.showFar = false;
         store.timings = {
           embedding_time_s: data.embedding_time_s,
           search_time_s:    data.search_time_s,
+          rerank_time_s:    data.rerank_time_s || 0,
         };
         pruneFacets();
         store.phase = 'done';
@@ -281,7 +285,8 @@ const SearchPage = {
       modeEntries: MODE_ENTRIES,
       visible: visibleResults,
       groups: groupedResults,
-      ft, countText, embedTime, searchTime, searchPrefix,
+      strongGroups, farGroups, farCount,
+      ft, countText, embedTime, searchTime, rerankTime, searchPrefix,
       // Filter entry counts (whole result set) + the Time slider state.
       counts: filterCounts,
       yearDomain, yearFrom, yearTo, rangeFill, setYearFrom, setYearTo,

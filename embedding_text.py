@@ -32,6 +32,22 @@ EMBEDDING_MODEL_NAME = "google/embeddinggemma-2"
 # export/import, which must run without sentence-transformers installed.
 EMBEDDING_DIMS = 768
 
+# Task prompts. EmbeddingGemma is trained with asymmetric retrieval prompts:
+# queries and documents are encoded with DIFFERENT prefixes, and plain
+# `.encode(text)` (no prompt) degrades retrieval quality and makes cosine
+# scores hard to threshold. The prompt is prepended to the text by
+# sentence-transformers (`encode(text, prompt=...)`); it is NOT part of the
+# text builders below, so the sha256 join key used by export/import is the
+# same with or without prompts — which is exactly why export/import ALSO
+# stamp/check this flag: same key, incompatible vectors.
+#
+# Flipping this flag requires re-running scripts/insert_embeddings.py (every
+# vector must be re-encoded with the document prompt) AND recalibrating the
+# similarity thresholds in query_config.THRESHOLDS.
+USE_EMBEDDING_PROMPTS = True
+QUERY_PROMPT = "task: search result | query: "
+DOCUMENT_PROMPT = "title: none | text: "
+
 
 def _s(value):
     """Coerce a property value to a stable string.

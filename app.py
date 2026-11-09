@@ -30,6 +30,7 @@ from pydantic import BaseModel, Field
 from typing import Literal
 from prometheus_fastapi_instrumentator import Instrumentator
 
+import query_config
 import query_util
 
 # stdout logging; uvicorn's root handler gives every line a timestamp, so
@@ -42,6 +43,25 @@ class FilterModel(BaseModel):
     types: list[Literal["Contribution", "Recommendation", "Gap", "Project"]] = Field(
         default=[], description="Node labels to restrict results to; empty = all types"
     )
+
+
+class ThresholdOverrides(BaseModel):
+    """Per-request overrides of query_config.THRESHOLDS (calibration and
+    experiments). Every field is optional; omitted ones keep the default."""
+    min_sim: float | dict[str, float] | None = Field(
+        default=None,
+        description="Vector floor (Neo4j cosine in [0,1]): one value for all "
+                    "vector sources, or {source: value}")
+    high_sim: float | None = Field(
+        default=None, description="A single vector hit >= this is strong on its own")
+    bm25_alpha: float | None = Field(
+        default=None, description="Lexical relative cut: keep score >= alpha * top")
+    bm25_floor: float | dict[str, float] | None = Field(
+        default=None, description="Lexical absolute floor, global or {source: value}")
+
+    def as_overrides(self):
+        return {"minSim": self.min_sim, "highSim": self.high_sim,
+                "bm25Alpha": self.bm25_alpha, "bm25Floor": self.bm25_floor}
 
 
 class SearchRequest(BaseModel):
@@ -60,6 +80,14 @@ class SearchRequest(BaseModel):
     filters: FilterModel | None = Field(
         default=None, description="Result filters (e.g. restrict to specific node types)"
     )
+    thresholds: ThresholdOverrides | None = Field(
+        default=None,
+        description="Override the relevance thresholds that split results "
+                    "into tier 'strong' / 'far'")
+    rerank: bool | None = Field(
+        default=None,
+        description="Re-score the top candidates with the cross-encoder "
+                    "(default: server config; never in author mode)")
 
 
 @asynccontextmanager
@@ -77,6 +105,10 @@ async def lifespan(app: FastAPI):
                        len(missing), ", ".join(missing))
     else:
         logger.info("index check OK: all expected fulltext/vector indexes present")
+    # Load the reranker now (not at the first search, which would otherwise
+    # pay the multi-second model load).
+    if query_config.USE_RERANKER:
+        query_config.get_reranker()
     yield
     # Shutdown: close the Neo4j connection pool while uvicorn is still
     # draining, instead of letting the sockets die with the process.
@@ -170,15 +202,18 @@ def search(req: SearchRequest):
             rrf_constant=req.rrf_constant,
             types=types,
             mode=req.mode,
+            thresholds=req.thresholds.as_overrides() if req.thresholds else None,
+            rerank_results=req.rerank,
         )
     except Exception as exc:
         # JSON from inside the endpoint, not an unhandled exception: see
         # server_error() for why that matters to a cross-origin browser.
         return server_error(exc)
     total = time.perf_counter() - started
-    logger.info("search DONE q=%r embed=%.3fs neo4j=%.3fs total=%.3fs n=%d",
-                query_preview, result["embedding_time_s"],
-                result["search_time_s"], total, len(result["results"]))
+    n_strong = sum(1 for r in result["results"] if r.get("tier") == "strong")
+    logger.info("search DONE q=%r embed=%.3fs neo4j=%.3fs rerank=%.3fs total=%.3fs n=%d strong=%d",
+                query_preview, result["embedding_time_s"], result["search_time_s"],
+                result["rerank_time_s"], total, len(result["results"]), n_strong)
     return result
 
 

@@ -74,7 +74,7 @@ export const TAXONOMY_GROUPS = [
       'Attività economiche',
       'Biodiversità',
       'Clima e variabili climatiche',
-      'Dati',
+      'Dati, monitoraggio e sistemi informativi',
       'Dinamica mareale e surge',
       'Ecosistemi lagunari',
       'Infrastrutture e opere',
@@ -85,7 +85,6 @@ export const TAXONOMY_GROUPS = [
       'Salute e benessere',
       'Sedimenti e morfologia lagunare',
       'Subsidenza',
-      'monitoraggio e sistemi informativi',
     ],
   },
   {
@@ -118,6 +117,8 @@ export const TAXONOMY_GROUPS = [
     ],
   },
 ];
+
+const PURPOSE_VALUES = PURPOSE_ENTRIES.map(e => e.value);
 
 // One checkbox entry per value; all boxes of a group share its dot colour.
 for (const group of TAXONOMY_GROUPS) {
@@ -183,6 +184,7 @@ export const store = reactive({
   error: '',
   results: [],          // FULL result set from the API (filters apply client-side)
   timings: {},          // last successful response: embedding/search seconds
+  showFar: false,       // "show more, possibly unrelated results" expanded?
 
   // Advanced parameters (the inputs are the source of truth; clamped on send)
   source_k: 20,
@@ -308,7 +310,13 @@ function facetPasses(key, r) {
 // Whitelist semantics per axis: a result survives if it carries at least one
 // active tag. Results with NO tags on an axis (e.g. a Rec/Gap with no purpose)
 // are "untagged" and always pass that axis.
-function passesAxis(tags, active) {
+//
+// `known` = the axis' full checkbox list. Tags outside it (a value that
+// appeared in the graph after this UI shipped, or a malformed one) cannot be
+// ticked or unticked, so they are IGNORED: a result whose tags are all
+// unknown counts as untagged instead of vanishing with every box ticked.
+function passesAxis(tags, active, known) {
+  if (known) tags = tags.filter(t => known.includes(t));
   if (!tags.length) return true;
   if (!active.length) return false;
   return tags.some(t => active.includes(t));
@@ -346,11 +354,11 @@ export const visibleResults = computed(() => {
       typeOk = passesAxis([r.type], typeActive);
     }
     if (!typeOk) return false;
-    if (!passesAxis(r.purposes || [], purposeActive)) return false;
+    if (!passesAxis(r.purposes || [], purposeActive, PURPOSE_VALUES)) return false;
     // The taxonomy facets are three more independent axes (AND across
     // groups, OR inside one), same rule as the purpose filter.
     for (const g of TAXONOMY_GROUPS) {
-      if (!passesAxis(r[g.field] || [], taxonomyActive[g.key])) return false;
+      if (!passesAxis(r[g.field] || [], taxonomyActive[g.key], g.values)) return false;
     }
     if (dom.min !== null) {
       const y = yearOf(r);
@@ -393,6 +401,23 @@ export const groupedResults = computed(() => {
   }
   return groups;
 });
+
+// ---- Relevance tiers -------------------------------------------------------
+// The backend tags every result "strong" or "far" (raw-score thresholds +
+// agreement between lexical and semantic retrieval, see query_config.py).
+// Results without a tier (saved before tiering existed) count as strong.
+export const isStrong = r => (r.tier || 'strong') === 'strong';
+
+// Tiering is done per GROUP, so a parent and its nested Rec/Gap never get
+// split across the two lists: a group is strong if ANY member is strong.
+function groupIsStrong(g) {
+  return (g.root && isStrong(g.root)) || g.children.some(isStrong);
+}
+export const strongGroups = computed(() => groupedResults.value.filter(groupIsStrong));
+export const farGroups = computed(() => groupedResults.value.filter(g => !groupIsStrong(g)));
+// Number of RESULTS (not groups) behind the "show more" toggle.
+export const farCount = computed(() =>
+  farGroups.value.reduce((n, g) => n + (g.root ? 1 : 0) + g.children.length, 0));
 
 // Selections that vanished from a fresh result set are dropped — the same
 // moment the previous code pruned them (while seeding the lists).
@@ -444,6 +469,7 @@ export function restoreState() {
   store.submittedQuery = saved.query;
   store.results = saved.results;
   store.timings = saved.timings || {};
+  store.showFar = false;
   pruneFacets();
   store.phase = 'done';
   return true;

@@ -278,6 +278,11 @@
     .child-group .card { margin-bottom: 10px; }
     .child-group .card:last-child { margin-bottom: 0; }
     .empty, .error, .loading { color: var(--muted); text-align: center; padding: 24px 0; }
+    .far-toggle { display: block; width: 100%; margin: 8px 0 14px; padding: 10px 14px; font: inherit; font-size: 14px; color: var(--muted); background: transparent; border: 1px dashed var(--border); border-radius: 8px; cursor: pointer; }
+    .far-toggle:hover { color: #202124; border-style: solid; }
+    .far-results { border-top: 1px solid var(--border); padding-top: 14px; }
+    .far-results .card { opacity: .85; }
+    .scores .fail { opacity: .5; }
     .error { color: #d93025; }
     footer { margin: 40px 0 20px; font-size: 12px; color: #9aa0a6; }
     /* Footer now sits in the left column, right under the summary lines. */
