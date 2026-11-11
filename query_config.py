@@ -211,7 +211,10 @@ def chooseSourceWeights(query: str):
 # CPU cost grows with RERANK_TOP_N x RERANK_MAX_LENGTH: lower either if the
 # search gets too slow.
 USE_RERANKER = True
-RERANKER_MODEL_NAME = "BAAI/bge-reranker-v2-m3"   # multilingual (IT/EN)
+RERANKER_MODEL_NAME = "cross-encoder/ms-marco-MiniLM-L6-v2"
+# - "Qwen/Qwen3-Reranker-0.6B" -> also too slow
+# BAAI bge seems to work well but it's too slow
+# "BAAI/bge-reranker-v2-m3"   # multilingual (IT/EN)
 RERANK_TOP_N = 30          # candidates re-scored per query
 RERANK_MAX_LENGTH = 512    # tokens of (query + document) seen by the model
 # Author mode matches NAMES: a text cross-encoder has nothing to judge there.
