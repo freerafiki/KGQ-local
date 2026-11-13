@@ -20,6 +20,7 @@ EMBEDDING_MODEL_NAME = "BAAI/bge-m3"
 EMBEDDING_DIMS = 1024
 
 # EMBEDDING_MODEL_NAME = "google/embeddinggemma-2"
+# EMBEDDING_DIMS = 768
 # Native output width of the model above (len(model.encode(...)) == 768, and
 # model.get_sentence_embedding_dimension() == 768). insert_embeddings.py hands
 # it to Neo4j as `vector.dimensions` when creating the vector indexes, so a
@@ -30,7 +31,7 @@ EMBEDDING_DIMS = 1024
 # query_config.py autodetects the width from the loaded model and warns loudly
 # when the two disagree; this constant stays as the model-free fallback for
 # export/import, which must run without sentence-transformers installed.
-EMBEDDING_DIMS = 768
+
 
 # Task prompts. EmbeddingGemma is trained with asymmetric retrieval prompts:
 # queries and documents are encoded with DIFFERENT prefixes, and plain
