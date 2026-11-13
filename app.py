@@ -26,7 +26,7 @@ from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from neo4j.exceptions import ServiceUnavailable, SessionExpired
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 from typing import Literal
 from prometheus_fastapi_instrumentator import Instrumentator
 
@@ -86,8 +86,23 @@ class SearchRequest(BaseModel):
                     "into tier 'strong' / 'far'")
     rerank: bool | None = Field(
         default=None,
-        description="Re-score the top candidates with the cross-encoder "
+        description="Re-score the top candidates with the reranker "
                     "(default: server config; never in author mode)")
+    reranker: str | None = Field(
+        default=None,
+        description="Which reranker: 'colbert', 'cross-encoder' (server default "
+                    "model) or a query_config.RERANKER_MODELS name, e.g. "
+                    "'ettin-32m' (default: server config)")
+
+    @field_validator("reranker")
+    @classmethod
+    def _known_reranker(cls, v):
+        # Registry names only: a request must never trigger a model download
+        # of its choosing.
+        if v is not None and v not in query_config.reranker_specs():
+            raise ValueError(f"unknown reranker {v!r}; expected one of "
+                             f"{', '.join(query_config.reranker_specs())}")
+        return v
 
 
 @asynccontextmanager
@@ -108,7 +123,7 @@ async def lifespan(app: FastAPI):
     # Load the reranker now (not at the first search, which would otherwise
     # pay the multi-second model load).
     if query_config.USE_RERANKER:
-        query_config.get_reranker()
+        query_config.preload_reranker()
     yield
     # Shutdown: close the Neo4j connection pool while uvicorn is still
     # draining, instead of letting the sockets die with the process.
@@ -204,6 +219,7 @@ def search(req: SearchRequest):
             mode=req.mode,
             thresholds=req.thresholds.as_overrides() if req.thresholds else None,
             rerank_results=req.rerank,
+            reranker=req.reranker,
         )
     except Exception as exc:
         # JSON from inside the endpoint, not an unhandled exception: see
@@ -211,9 +227,10 @@ def search(req: SearchRequest):
         return server_error(exc)
     total = time.perf_counter() - started
     n_strong = sum(1 for r in result["results"] if r.get("tier") == "strong")
-    logger.info("search DONE q=%r embed=%.3fs neo4j=%.3fs rerank=%.3fs total=%.3fs n=%d strong=%d",
+    logger.info("search DONE q=%r embed=%.3fs neo4j=%.3fs rerank=%.3fs %s total=%.3fs n=%d strong=%d",
                 query_preview, result["embedding_time_s"], result["search_time_s"],
-                result["rerank_time_s"], total, len(result["results"]), n_strong)
+                result["rerank_time_s"], result["rerank_timing"] or "",
+                total, len(result["results"]), n_strong)
     return result
 
 

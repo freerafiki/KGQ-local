@@ -7,3 +7,6 @@ sentence-transformers==6.0.1
 huggingface_hub>=1.14.0
 tqdm>=4.0.0
 prometheus-fastapi-instrumentator>=7.0.0
+# BGE-M3 ColBERT reranker (colbert_m3.py). 1.4.2 requires transformers<6,
+# compatible with the transformers 5.x pulled by sentence-transformers 6.
+FlagEmbedding==1.4.2

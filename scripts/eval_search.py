@@ -43,17 +43,25 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-# name -> run_search arguments. "+rerank" variants differ ONLY by the
-# cross-encoder, so the pair measures what the reranker adds.
-METHODS = {
-    "nl":              {"mode": "nl",       "rerank_results": False},
-    "nl+rerank":       {"mode": "nl",       "rerank_results": True},
-    "keywords":        {"mode": "keywords", "rerank_results": False},
-    "keywords+rerank": {"mode": "keywords", "rerank_results": True},
-    "title":           {"mode": "title",    "rerank_results": False},
-    "title+rerank":    {"mode": "title",    "rerank_results": True},
-    "author":          {"mode": "author",   "rerank_results": False},
-}
+# name -> run_search arguments. Per mode: no reranker, "+rerank" (the default
+# cross-encoder, query_config.RERANKER), "+colbert" (BGE-M3 late interaction,
+# needs the ColBERT index) and "+<name>" for every cross-encoder in
+# reranker_models.RERANKER_MODELS (e.g. nl+ettin-32m). Variants of one mode
+# differ ONLY by the reranker, so each pair measures what that reranker adds.
+# The reranker is pinned here, independent of the server default.
+from reranker_models import RERANKER_MODELS  # dependency-free: no model load
+
+METHODS = {}
+for _mode in ("nl", "keywords", "title"):
+    METHODS[_mode] = {"mode": _mode, "rerank_results": False}
+    METHODS[f"{_mode}+rerank"] = {"mode": _mode, "rerank_results": True,
+                                  "reranker": "cross-encoder"}
+    METHODS[f"{_mode}+colbert"] = {"mode": _mode, "rerank_results": True,
+                                   "reranker": "colbert"}
+    for _name in RERANKER_MODELS:
+        METHODS[f"{_mode}+{_name}"] = {"mode": _mode, "rerank_results": True,
+                                       "reranker": _name}
+METHODS["author"] = {"mode": "author", "rerank_results": False}
 
 JUDGMENT_FIELDS = ["qid", "query", "doc_key", "type", "title", "text", "label", "note"]
 
@@ -144,6 +152,8 @@ def cmd_run(args):
                 lines.append(json.dumps({
                     "qid": q["qid"], "query": q["query"], "method": m,
                     "reranked": res.get("reranked", False),
+                    "rerank_time_s": res.get("rerank_time_s"),
+                    "rerank_timing": res.get("rerank_timing"),
                     "results": [{
                         "doc_key": r["doc_key"], "type": r["type"],
                         "title": r.get("officialTitle") or r.get("title"),

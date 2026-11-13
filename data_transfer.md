@@ -88,7 +88,7 @@ Read-only apart from writing the JSON. The file starts with a meta record:
 
 ```json
 [
-  {"meta": {"model": "BAAI/bge-m3", "dims": 1024, "created": "2026-09-22T14:03:12"}},
+  {"meta": {"model": "BAAI/bge-m3", "dims": 1024, "prompts": false, "created": "2026-09-22T14:03:12"}},
   {"key": "<sha256 of the embedded text>", "label": "Contribution", "field": "descrEmbedding", "vector": [...]},
   ...
 ]
@@ -140,14 +140,58 @@ Read-only, runs in seconds. Expect ~100% `done` per field except the small
 number of empty-text nodes. If anything shows `todo`, re-run
 `insert_embeddings.py` (it only processes `todo`/unflagged nodes).
 
+## ColBERT reranker index
+
+Used only when `RERANKER_KIND = "colbert"` (`query_config.py`, or
+`"reranker": "colbert"` per request). It lives **outside Neo4j**, in a
+folder of files, so moving it is a plain copy: there is no import step.
+
+Needs `FlagEmbedding` (pinned in `requirements.txt`) on the build machine
+**and** on every serving machine: the query is encoded with the same model.
+
+On the **build** machine (GPU / many cores; needs the graph):
+
+```bash
+python3 scripts/build_colbert_index.py            # full build -> data/colbert/
+python3 scripts/build_colbert_index.py --update   # later: only new / edited texts
+```
+
+It prints the number of docs, tokens per doc, and the folder size. A full
+build is safe to interrupt: the previous index stays valid until the new one is
+swapped in, and an interrupted `--update` keeps everything it had encoded.
+
+Copy the whole folder to every serving machine:
+
+```bash
+rsync -a data/colbert/ server:/path/to/KGQ-local/data/colbert/
+```
+
+Then restart the API (the index is opened once at startup). Use
+`COLBERT_INDEX_DIR` in `.env` to keep it somewhere else.
+
+- **Keys** are the sha256 of the exact text the reranker reads
+  (`embedding_text.rerank_text`), so they survive graph rebuilds, like the
+  dense export. A node whose text changed after the build is a *miss*: per
+  `COLBERT_ON_MISS` it is either encoded on the fly (`encode`, slow on a laptop
+  CPU) or left unscored and shown as "far". `colbert_misses` in each search
+  response (and `scripts/query_benchmark.py`) tells you when it is time for a
+  `--update` build.
+- **Meta check**: `index.json` records model, dims and `doc_max_length`. A
+  folder built with different settings is refused when it is loaded.
+  The FlagEmbedding version is only warned about.
+- The folder is under `data/`, which is gitignored (it encodes the corpus).
+
 ## Troubleshooting
 
 - **Restore fails with a permissions error** — `neo4j-admin` runs as the Neo4j
   data-directory owner, which must be able to *traverse* every directory up to
   the dump/restore dir. Follow the `namei` diagnosis the script prints, or use
   `/var/lib/neo4j/backup`.
-- **Import aborts with a model/dims mismatch** — the file was produced with a
-  different model. Either export again from a machine using
+- **Import aborts with a model/dims/prompts mismatch** — the file was produced
+  with a different model, or with task prompts on/off differently
+  (`USE_EMBEDDING_PROMPTS` follows the model, see `MODEL_PROMPTS` in
+  `embedding_text.py`; exports from before bge-m3 went prompt-free say
+  `prompts: true`). Either export again from a machine using
   `EMBEDDING_MODEL_NAME`/`EMBEDDING_DIMS` (see `embedding_text.py`), or skip
   the import and let `insert_embeddings.py` compute everything locally.
 - **A node's text changed between export and import** — the sha256 join key

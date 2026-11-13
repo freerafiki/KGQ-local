@@ -15,7 +15,12 @@ Two steps:
    pool.csv and fill the `relevant` column with 2 / 1 / 0 (leave it empty to
    skip a row). With --judgments eval/judgments.csv, rows already judged
    for scripts/eval_search.py are pre-filled, so nothing is labelled twice.
-   The reranker scores the pooled rows too (column rerank_score).
+   The reranker scores the pooled rows too (column rerank_score);
+   --reranker picks which one: "colbert", or a cross-encoder name from
+   reranker_models.RERANKER_MODELS (e.g. ettin-32m). The column is on THAT
+   model's scale, so `fit` it into that model's threshold:
+   RERANKER_MODELS[name]["threshold"] (reranker_models.py), or
+   COLBERT_RERANK_THRESHOLD (query_config.py) for colbert.
    Needs the DB, the embedding model and the reranker.
 
 2) fit: read the labelled CSV, sweep each threshold, and suggest values:
@@ -97,7 +102,8 @@ def dump(args):
                 res = run_search(q, source_k=args.source_k, final_k=100000,
                                  mode="nl", thresholds=PERMISSIVE_THRESHOLDS,
                                  rerank_results=not args.no_rerank,
-                                 rerank_top_n=args.pool)
+                                 rerank_top_n=args.pool,
+                                 reranker=args.reranker)
                 results = sorted(res["results"], key=lambda r: -r["wrrf_score"])
                 top = {}
                 for r in results:
@@ -265,7 +271,7 @@ def fit(args):
     rr_pairs = [(r["rerank"], r["relevant"]) for r in rows if r["rerank"] is not None]
     rr_choice = None
     if len(rr_pairs) >= 5:
-        print("\n=== Reranker: absolute threshold on the cross-encoder score ===")
+        print("\n=== Reranker: absolute threshold on the rerank_score column ===")
         best, hit, table = pick(rr_pairs, args.target_precision or 1.01)
         rr_choice = hit if (args.target_precision and hit is not None) else best
         print(f"[rerank] {len(rr_pairs)} rows; best F1 at {best:.4f}"
@@ -301,7 +307,11 @@ def fit(args):
     print("    },")
     print("}")
     if rr_choice is not None:
-        print(f"RERANK_THRESHOLD = {round(rr_choice, 4)}")
+        print(f"# reranker threshold (the model the pool was dumped with):\n"
+              f"#   cross-encoder: RERANKER_MODELS[<name>]['threshold'] = {round(rr_choice, 4)}"
+              f"   (reranker_models.py)\n"
+              f"#   colbert:       COLBERT_RERANK_THRESHOLD = {round(rr_choice, 4)}"
+              f"   (query_config.py)")
 
     if args.plot:
         plot(rows, args.plot_out)
@@ -348,6 +358,10 @@ def main():
     d.add_argument("--source-k", type=int, default=50, help="candidates per branch")
     d.add_argument("--judgments", help="eval judgments.csv: pre-fill known labels")
     d.add_argument("--no-rerank", action="store_true", help="skip the reranker column")
+    from reranker_models import RERANKER_MODELS   # dependency-free
+    d.add_argument("--reranker", default=None,
+                   choices=("cross-encoder", "colbert", *RERANKER_MODELS),
+                   help="reranker for the rerank_score column (default: server config)")
     d.set_defaults(func=dump)
 
     f = sub.add_parser("fit", help="suggest thresholds from a labelled CSV")

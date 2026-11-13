@@ -24,7 +24,7 @@ from dotenv import load_dotenv
 from neo4j import GraphDatabase, RoutingControl
 
 import query_config
-from embedding_text import _s
+from embedding_text import _s, rerank_text, rerank_text_key
 from query_config import chooseSourceWeights, encode_query, thresholds_for
 
 # Same logger family as app.py ("kgq.api"), so uvicorn's handler shows these
@@ -713,58 +713,130 @@ def _doc_key(labels, record):
 
 
 def _rerank_text(r):
-    """The document side of the (query, document) pair the cross-encoder
-    reads: title first (most informative per token), then the body text.
-    RERANK_MAX_LENGTH truncates whatever does not fit."""
-    parts = [r.get("officialTitle") or r.get("title")]
+    """The document side the reranker reads (cross-encoder pair / ColBERT
+    doc vectors), built from a search result. The builder itself lives in
+    embedding_text.rerank_text, shared with scripts/build_colbert_index.py
+    (which builds the same string from raw node properties): the ColBERT
+    index is keyed by its hash. Model max length truncates the overflow."""
+    title = r.get("officialTitle") or r.get("title")
     t = r["type"]
     if t == "Oggetto Informativo":
-        parts += [r.get("abstract"), r.get("findings")]
+        body = (r.get("abstract"), r.get("findings"))    # = description, findings
     elif t == "Raccomandazione":
-        parts += [r.get("content"), r.get("motivation")]
+        body = (r.get("content"), r.get("motivation"))
     else:  # Lacuna, Progetto
-        parts += [r.get("description")]
-    return "\n".join(_s(p) for p in parts if _s(p).strip())
+        body = (r.get("description"),)
+    return rerank_text(title, *body)
 
 
 def _sigmoid(x):
     return 1.0 / (1.0 + math.exp(-x))
 
 
-def rerank(query_text, results, top_n=None, threshold=None):
-    """Re-score the first `top_n` results with the cross-encoder and re-tier
-    ALL results on its score. Returns (results, seconds).
-
-    - reranked:   tier = strong iff rerank_score >= threshold
-    - not reranked (beyond top_n): tier = far, kept after the reranked ones
-    The pre-fusion tier is kept as `prefusion_tier` for comparison.
-    """
-    top_n = query_config.RERANK_TOP_N if top_n is None else top_n
-    threshold = query_config.RERANK_THRESHOLD if threshold is None else threshold
-    head, tail = results[:top_n], results[top_n:]
-    if not head:
-        return results, 0.0
-    model = query_config.get_reranker()
-    start = time.time()
-    # Raw logits, sigmoid applied here: independent of the library's default
-    # activation for single-label models.
+def _score_cross_encoder(query_text, head, timing, name):
+    """One pass of the registry cross-encoder `name` over the (query, doc)
+    pairs; score = sigmoid(logit) or the raw logit, per the model's
+    `activation` in query_config.RERANKER_MODELS."""
     import torch
+    model = query_config.get_reranker(name)
+    start = time.time()
+    # Raw logits, activation applied here: independent of the library's
+    # default activation for single-label models.
     logits = model.predict([(query_text, _rerank_text(r)) for r in head],
                            activation_fn=torch.nn.Identity(),
                            convert_to_numpy=True)
+    timing["rerank_model_s"] = time.time() - start
+    if query_config.RERANKER_MODELS[name]["activation"] == "identity":
+        return [float(x) for x in logits]
+    return [_sigmoid(float(x)) for x in logits]
+
+
+def _score_colbert(query_text, head, timing):
+    """MaxSim per candidate against the precomputed ColBERT index; only the
+    query is encoded (plus index misses when COLBERT_ON_MISS == "encode").
+    A candidate left unscored gets None."""
+    import colbert_m3
+    store = query_config.get_colbert_store()
+    start = time.time()
+    q = colbert_m3.encode_query(query_text)
+    timing["rerank_query_encode_s"] = time.time() - start
+
+    texts = [_rerank_text(r) for r in head]
+    docs = [store.get(rerank_text_key(t)) for t in texts]
+    missing = [i for i, d in enumerate(docs) if d is None]
+    timing["colbert_misses"] = len(missing)
+    if missing and query_config.COLBERT_ON_MISS == "encode":
+        start = time.time()
+        for i, vecs in zip(missing, colbert_m3.encode_documents([texts[i] for i in missing])):
+            docs[i] = vecs
+        timing["rerank_miss_encode_s"] = time.time() - start
+    if missing:
+        logger.info("colbert: %d/%d candidates not in the index (%s)", len(missing),
+                    len(head), "encoded now" if query_config.COLBERT_ON_MISS == "encode"
+                    else "left unscored")
+
+    start = time.time()
+    scores = [None if d is None else colbert_m3.maxsim(q, d) for d in docs]
+    timing["rerank_maxsim_s"] = time.time() - start
+    return scores
+
+
+def rerank(query_text, results, top_n=None, threshold=None, kind=None):
+    """Re-score the first `top_n` results with the reranker and re-tier ALL
+    results on its score. Returns (results, seconds, timing).
+
+    `kind` is a reranker spec (query_config.resolve_reranker): "colbert",
+    "cross-encoder" (= query_config.RERANKER) or a RERANKER_MODELS name;
+    None = the server default.
+
+    - reranked:   tier = strong iff rerank_score >= threshold (the model's
+      own; a model with threshold None is uncalibrated: all "far")
+    - not reranked (beyond top_n, or a ColBERT index miss left unscored):
+      tier = far, kept after the reranked ones in their wRRF order
+    The pre-fusion tier is kept as `prefusion_tier` for comparison.
+    `timing` breaks the seconds down per step (plus colbert_misses).
+    """
+    kind, name = query_config.resolve_reranker(kind)
+    colbert = kind == "colbert"
+    if top_n is None:
+        top_n = query_config.COLBERT_RERANK_TOP_N if colbert else query_config.RERANK_TOP_N
+    if threshold is None:
+        threshold = (query_config.COLBERT_RERANK_THRESHOLD if colbert
+                     else query_config.RERANKER_MODELS[name]["threshold"])
+    if threshold is None:
+        logger.warning("reranker %s has no calibrated threshold: ranking only, "
+                       "every result is 'far'", name)
+        threshold = math.inf
+    head, tail = results[:top_n], results[top_n:]
+    timing = {"reranker": name or kind}
+    if not head:
+        return results, 0.0, timing
+    start = time.time()
+    if colbert:
+        scores = _score_colbert(query_text, head, timing)
+    else:
+        scores = _score_cross_encoder(query_text, head, timing, name)
     elapsed = time.time() - start
-    for r, logit in zip(head, logits):
-        r["rerank_score"] = round(_sigmoid(float(logit)), 4)
+    unscored = []
+    for r, score in zip(head, scores):
         r["prefusion_tier"] = r["tier"]
-        r["tier"] = "strong" if r["rerank_score"] >= threshold else "far"
+        if score is None:
+            r["rerank_score"] = None
+            r["tier"] = "far"
+            unscored.append(r)
+        else:
+            r["rerank_score"] = round(score, 4)
+            r["tier"] = "strong" if r["rerank_score"] >= threshold else "far"
     for r in tail:
         r["rerank_score"] = None
         r["prefusion_tier"] = r["tier"]
         r["tier"] = "far"
-    head.sort(key=lambda r: (r["tier"] != "strong", -r["rerank_score"]))
-    strong = [r for r in head if r["tier"] == "strong"]
-    far = [r for r in head if r["tier"] != "strong"]
-    return strong + far + tail, elapsed
+    scored = [r for r in head if r["rerank_score"] is not None]
+    scored.sort(key=lambda r: (r["tier"] != "strong", -r["rerank_score"]))
+    strong = [r for r in scored if r["tier"] == "strong"]
+    far = [r for r in scored if r["tier"] != "strong"]
+    timing = {k: (round(v, 4) if isinstance(v, float) else v) for k, v in timing.items()}
+    return strong + far + unscored + tail, elapsed, timing
 
 
 def embed_query(text: str):
@@ -781,7 +853,8 @@ def embed_query(text: str):
 
 def run_search(query_text, source_k=20, final_k=50, rrf_constant=60,
                source_weights=None, types=None, mode="nl", thresholds=None,
-               rerank_results=None, rerank_top_n=None, rerank_threshold=None):
+               rerank_results=None, rerank_top_n=None, rerank_threshold=None,
+               reranker=None):
     """Run the search (hybrid by default; the text-only modes skip embedding).
 
     Args:
@@ -805,8 +878,11 @@ def run_search(query_text, source_k=20, final_k=50, rrf_constant=60,
         rerank_results: re-score the top candidates with the cross-encoder
             (query_config.USE_RERANKER when None; never in "author" mode).
             When it runs, the tier comes from the rerank score.
-        rerank_top_n / rerank_threshold: override RERANK_TOP_N /
-            RERANK_THRESHOLD (evaluation, calibration).
+        rerank_top_n / rerank_threshold: override the reranker's top-N /
+            threshold (evaluation, calibration).
+        reranker: reranker spec: "colbert", "cross-encoder" (=
+            query_config.RERANKER) or a query_config.RERANKER_MODELS name;
+            None = server default (RERANKER_KIND / RERANKER).
 
     Returns:
         {
@@ -863,10 +939,12 @@ def run_search(query_text, source_k=20, final_k=50, rrf_constant=60,
         # explicit request (API flag, evaluation): any mode with text to judge
         reranked = bool(rerank_results) and mode != "author"
     rerank_time = 0.0
+    rerank_timing = {}
     if reranked:
-        results, rerank_time = rerank(query_text, results,
-                                      top_n=rerank_top_n,
-                                      threshold=rerank_threshold)
+        results, rerank_time, rerank_timing = rerank(query_text, results,
+                                                     top_n=rerank_top_n,
+                                                     threshold=rerank_threshold,
+                                                     kind=reranker)
 
     return {
         "query": query_text,
@@ -876,6 +954,9 @@ def run_search(query_text, source_k=20, final_k=50, rrf_constant=60,
         "search_time_s": round(search_time, 4),
         "reranked": reranked,
         "rerank_time_s": round(rerank_time, 4),
+        # per-step breakdown: reranker kind, rerank_model_s (cross-encoder) or
+        # rerank_query_encode_s / rerank_maxsim_s / colbert_misses (colbert)
+        "rerank_timing": rerank_timing,
         "results": results,
     }
 

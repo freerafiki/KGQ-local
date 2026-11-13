@@ -16,7 +16,8 @@ static two-page frontend.
 
 Deployment options, systemd unit and the Apache vhost notes:
 [possible_deployments.md](possible_deployments.md).
-Moving the graph or embeddings between machines: [data_transfer.md](data_transfer.md).
+Moving the graph, embeddings or the ColBERT index between machines: [data_transfer.md](data_transfer.md).
+Open work items: [TODO.md](TODO.md).
 
 ```bash
 systemctl status kgq
@@ -46,7 +47,9 @@ works behind Apache without any CORS at all.
 ## Repository layout
 
 - `app.py` — HTTP endpoints only; `query_util.py` — all retrieval logic;
-  `query_config.py` / `embedding_text.py` / `graph_helper.py` — shared modules.
+  `query_config.py` / `embedding_text.py` / `graph_helper.py` — shared modules;
+  `reranker_models.py` — cross-encoder registry (MiniLM, bge-m3, Ettin sizes);
+  `colbert_m3.py` — BGE-M3 ColBERT vectors and index store.
 - `scripts/` — tools you run, never imported by the API:
 
   | Script | Purpose |
@@ -55,9 +58,11 @@ works behind Apache without any CORS at all.
   | `embedding_status.py` | read-only embedding bookkeeping report |
   | `insert_embeddings.py` | compute missing embeddings + create indexes |
   | `export_embeddings.py` / `import_embeddings.py` | move vectors between machines |
+  | `build_colbert_index.py` | ColBERT token vectors for the `colbert` reranker (build machine) |
   | `add_node_titles.py` | derive short titles on Rec/Gap nodes |
   | `rewrite_query.py` | compare local LLM query rewrites |
-  | `query_benchmark.py` | placeholder (currently empty) |
+  | `query_benchmark.py` | latency of the rerankers (none / cross-encoder / colbert) |
+  | `eval_search.py` / `calibrate_thresholds.py` | offline quality eval / threshold fitting |
   | `db_tool.sh` | Neo4j dump/restore wrapper |
   | `security_check.sh` | PASS/FAIL security assertions (CORS, schema endpoints) |
   | `run_frontend.sh` / `stop_servers.sh` | dev helpers |
@@ -76,6 +81,6 @@ python3 scripts/embedding_status.py
 These are local-only and gitignored; the repo itself is public:
 
 - `.env` — Neo4j credentials + Hugging Face token
-- `data/` — embedding exports and Neo4j dumps (the graph corpus)
+- `data/` — embedding exports, the ColBERT index and Neo4j dumps (the graph corpus)
 - `results/` — saved search results (corpus content)
 - `webserver.conf` — the real Apache vhost

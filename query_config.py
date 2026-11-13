@@ -201,57 +201,125 @@ def chooseSourceWeights(query: str):
 
 
 
-# ---- Cross-encoder reranker ---------------------------------------------------
-# The fused candidates are re-scored by a cross-encoder that reads query and
-# document TOGETHER. Its sigmoid output is roughly a relevance probability,
-# comparable across queries and modes, so ONE absolute threshold separates
-# "strong" from "far" — replacing the raw-score tiering above whenever the
-# reranker runs (the pre-fusion thresholds then only shape the candidate list).
+# ---- Rerankers ------------------------------------------------------------------
+# The fused candidates are re-scored by a reranker; its score replaces the
+# raw-score tiering above whenever it runs (the pre-fusion thresholds then only
+# shape the candidate list): strong = score >= the model's threshold.
 #
-# CPU cost grows with model size x RERANK_TOP_N x RERANK_MAX_LENGTH.
-# Measured on the dev laptop (i5-4278U, 2 cores), 20 candidates:
-#   cross-encoder/mmarco-mMiniLMv2-L12-H384-v1 (118M, 384 tok)   ~4 s
-#   BAAI/bge-reranker-v2-m3                    (568M, 512 tok)  ~95 s
-# bge-reranker-v2-m3 is clearly better (esp. Italian query <-> English text)
-# and the one to use on a server with a GPU or many cores; compare both with
-# scripts/eval_search.py before choosing. Recalibrate RERANK_THRESHOLD when
-# the model changes: the score scales differ.
+# Which reranker runs:
+#   "cross-encoder"  the RERANKER_MODELS entry named by RERANKER: reads
+#                    (query, doc) pairs together at query time
+#   "colbert"        BGE-M3 late interaction (colbert_m3.py): doc token
+#                    vectors precomputed on the build machine
+#                    (scripts/build_colbert_index.py), only the query is
+#                    encoded here, then MaxSim. Needs the index folder.
+# Per request (API `reranker`, run_search(reranker=...), the eval / benchmark
+# scripts) a SPEC picks one: "colbert", "cross-encoder" (= RERANKER), or any
+# RERANKER_MODELS name, so several cross-encoders can be compared in one
+# process. Only registry names are accepted: a request can never make the
+# server download an arbitrary model.
 USE_RERANKER = True
-RERANKER_MODEL_NAME = "cross-encoder/ms-marco-MiniLM-L6-v2"
-# - "Qwen/Qwen3-Reranker-0.6B" -> also too slow
-# BAAI bge seems to work well but it's too slow
-# "BAAI/bge-reranker-v2-m3"   # multilingual (IT/EN)
+RERANKER_KIND = "cross-encoder"
+RERANKER_KINDS = ("cross-encoder", "colbert")
+
+# The cross-encoder registry (RERANKER_MODELS: model id, score activation,
+# threshold per model) and the default RERANKER live in reranker_models.py,
+# dependency-free so the eval / calibration scripts can list them without
+# loading any model. Edit them THERE.
+from reranker_models import RERANKER_MODELS, RERANKER  # noqa: E402
+
 RERANK_TOP_N = 30          # candidates re-scored per query
 RERANK_MAX_LENGTH = 512    # tokens of (query + document) seen by the model
-# Author mode matches NAMES: a text cross-encoder has nothing to judge there.
 # DISCUSSION
 # Modes reranked BY DEFAULT. Title mode is a known-item lookup on titles
 # (single vague words like "climate" score low on a cross-encoder and would
 # all be pushed to "far"); author mode matches NAMES, nothing to judge.
 # An explicit rerank=True request still reranks title mode (evaluation).
 RERANK_MODES = ("nl", "keywords", "title") # remove "title" ?
-# !!! PLACEHOLDER — calibrate with scripts/calibrate_thresholds.py (column
-# rerank_score). Strong = rerank score >= this.
-RERANK_THRESHOLD = 0.5
 
-_reranker = None
+
+def reranker_specs():
+    """Every value accepted as a reranker spec."""
+    return ("cross-encoder", "colbert", *RERANKER_MODELS)
+
+
+def resolve_reranker(spec=None):
+    """spec -> ("colbert", None) or ("cross-encoder", registry name).
+    None = the server default (RERANKER_KIND / RERANKER)."""
+    if spec is None:
+        spec = RERANKER_KIND
+    if spec == "colbert":
+        return "colbert", None
+    name = RERANKER if spec == "cross-encoder" else spec
+    if name not in RERANKER_MODELS:
+        raise ValueError(f"unknown reranker {spec!r}; expected one of {reranker_specs()}")
+    return "cross-encoder", name
+
+
+_rerankers = {}
 _reranker_lock = threading.Lock()
 
 
-def get_reranker():
-    """Lazily load the cross-encoder once per process (thread-safe: FastAPI
-    runs sync endpoints in a thread pool)."""
-    global _reranker
-    if _reranker is None:
+def get_reranker(name=None):
+    """Lazily load a registry cross-encoder once per process (thread-safe:
+    FastAPI runs sync endpoints in a thread pool). Loaded models stay cached,
+    so a benchmark can compare several in one process."""
+    name = name or RERANKER
+    if name not in _rerankers:
         with _reranker_lock:
-            if _reranker is None:
+            if name not in _rerankers:
                 from sentence_transformers import CrossEncoder
-                logger.info("loading reranker %s", RERANKER_MODEL_NAME)
+                model_id = RERANKER_MODELS[name]["model"]
+                logger.info("loading reranker %s (%s)", name, model_id)
                 import torch
-                # float32 explicitly: the checkpoint loads as bfloat16, which
-                # is much slower on most CPUs (sentence-transformers warns).
+                # float32 explicitly on CPU: checkpoints shipped as bfloat16
+                # (e.g. Ettin) are much slower there on most CPUs.
                 dtype = torch.float16 if torch.cuda.is_available() else torch.float32
-                _reranker = CrossEncoder(RERANKER_MODEL_NAME,
-                                         max_length=RERANK_MAX_LENGTH,
-                                         model_kwargs={"dtype": dtype})
-    return _reranker
+                _rerankers[name] = CrossEncoder(model_id,
+                                                max_length=RERANK_MAX_LENGTH,
+                                                model_kwargs={"dtype": dtype})
+    return _rerankers[name]
+
+
+# ---- ColBERT reranker (RERANKER_KIND == "colbert") ------------------------------
+# Folder copied from the build machine (see data_transfer.md).
+COLBERT_INDEX_DIR = os.getenv("COLBERT_INDEX_DIR") or None   # None = data/colbert
+# Candidates scored by ColBERT: scoring is a few small matmuls, so it can look
+# much deeper into the wRRF list than the cross-encoder.
+COLBERT_RERANK_TOP_N = 100
+# !!! PLACEHOLDER — MaxSim (~[0, 1]) is its own scale, unlike the
+# cross-encoder thresholds. Calibrate with scripts/calibrate_thresholds.py
+# --reranker colbert.
+COLBERT_RERANK_THRESHOLD = 0.5
+# A candidate whose text is not in the index (node added or edited after the
+# build):
+#   "encode"  encode it now (one BGE-M3 pass over the doc: slow on a laptop
+#             CPU, but the ranking stays complete)
+#   "far"     no forward pass: rerank_score None, tier "far" (after the scored)
+COLBERT_ON_MISS = "encode"
+
+_colbert_store = None
+_colbert_store_lock = threading.Lock()
+
+
+def get_colbert_store():
+    """Lazily open the ColBERT index (memory-mapped, read-only) once."""
+    global _colbert_store
+    if _colbert_store is None:
+        with _colbert_store_lock:
+            if _colbert_store is None:
+                import colbert_m3
+                _colbert_store = colbert_m3.ColbertStore(
+                    COLBERT_INDEX_DIR or colbert_m3.DEFAULT_INDEX_DIR)
+    return _colbert_store
+
+
+def preload_reranker(spec=None):
+    """Load everything the default reranker needs (server startup)."""
+    kind, name = resolve_reranker(spec)
+    if kind == "colbert":
+        import colbert_m3
+        get_colbert_store()
+        colbert_m3.get_colbert_model()
+    else:
+        get_reranker(name)

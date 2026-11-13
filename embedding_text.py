@@ -33,21 +33,29 @@ EMBEDDING_DIMS = 1024
 # export/import, which must run without sentence-transformers installed.
 
 
-# Task prompts. EmbeddingGemma is trained with asymmetric retrieval prompts:
-# queries and documents are encoded with DIFFERENT prefixes, and plain
-# `.encode(text)` (no prompt) degrades retrieval quality and makes cosine
-# scores hard to threshold. The prompt is prepended to the text by
+# Task prompts, chosen BY THE MODEL. EmbeddingGemma is trained with asymmetric
+# retrieval prompts: queries and documents are encoded with DIFFERENT
+# prefixes, and plain `.encode(text)` (no prompt) degrades retrieval quality
+# and makes cosine scores hard to threshold. BGE-M3 is trained WITHOUT any
+# prompt, so it must get none. The prompt is prepended to the text by
 # sentence-transformers (`encode(text, prompt=...)`); it is NOT part of the
 # text builders below, so the sha256 join key used by export/import is the
 # same with or without prompts — which is exactly why export/import ALSO
 # stamp/check this flag: same key, incompatible vectors.
 #
-# Flipping this flag requires re-running scripts/insert_embeddings.py (every
-# vector must be re-encoded with the document prompt) AND recalibrating the
-# similarity thresholds in query_config.THRESHOLDS.
-USE_EMBEDDING_PROMPTS = True
-QUERY_PROMPT = "task: search result | query: "
-DOCUMENT_PROMPT = "title: none | text: "
+# Key = substring of EMBEDDING_MODEL_NAME (case-insensitive), value =
+# (query prompt, document prompt). Models not listed get no prompts.
+#
+# Whenever the RESULTING flag changes (model switch, or editing this table),
+# re-run scripts/insert_embeddings.py with RESET_EMBEDDING_STATUS (every
+# vector must be re-encoded) AND recalibrate query_config.THRESHOLDS.
+MODEL_PROMPTS = {
+    "embeddinggemma": ("task: search result | query: ", "title: none | text: "),
+}
+_prompts = next((p for key, p in MODEL_PROMPTS.items()
+                 if key in EMBEDDING_MODEL_NAME.lower()), None)
+USE_EMBEDDING_PROMPTS = _prompts is not None
+QUERY_PROMPT, DOCUMENT_PROMPT = _prompts or (None, None)
 
 
 def _s(value):
@@ -98,6 +106,39 @@ def project_text(description):
     """Projects are embedded on their description only (name is indexed
     full-text separately, see insert_embeddings.py)."""
     return _s(description)
+
+
+# ---- Reranker text -------------------------------------------------------------
+# The document side the reranker reads (cross-encoder pair, or ColBERT token
+# vectors): title first (most informative per token), then the body fields.
+# The ColBERT index is keyed by the sha256 of THIS string, built on one
+# machine (scripts/build_colbert_index.py, from raw node properties) and
+# looked up on another (query_util.rerank, from search results), so both
+# sides MUST go through rerank_text().
+#
+# label -> body properties, in order. Contribution `description` is what the
+# search results call `abstract`.
+RERANK_BODY_FIELDS = {
+    "Contribution": ("description", "findings"),
+    "Recommendation": ("content", "motivation"),
+    "Gap": ("description",),
+    "Project": ("description",),
+}
+
+
+def rerank_title(official_title, title, name):
+    """Same fallback as query_util._serialize's `officialTitle`."""
+    return official_title or title or name
+
+
+def rerank_text(title, *body):
+    return "\n".join(_s(p) for p in (title, *body) if _s(p).strip())
+
+
+def rerank_text_key(text):
+    """Join key of the ColBERT index (sha256 of the exact encoded text)."""
+    import hashlib
+    return hashlib.sha256(text.encode("utf-8")).hexdigest()
 
 
 # Which node text each embedding field comes from, for export/import.
