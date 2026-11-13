@@ -16,10 +16,10 @@ identity so query_config.py (model loader), export and import all agree.
 # (cross-checked against EMBEDDING_DIMS below); export_embeddings.py writes it
 # into the JSON meta record and import_embeddings.py refuses files whose
 # meta does not match (wrong model/dims => incompatible vectors).
-# EMBEDDING_MODEL_NAME = "BAAI/bge-m3"
-# EMBEDDING_DIMS = 1024
+EMBEDDING_MODEL_NAME = "BAAI/bge-m3"
+EMBEDDING_DIMS = 1024
 
-EMBEDDING_MODEL_NAME = "google/embeddinggemma-2"
+# EMBEDDING_MODEL_NAME = "google/embeddinggemma-2"
 # Native output width of the model above (len(model.encode(...)) == 768, and
 # model.get_sentence_embedding_dimension() == 768). insert_embeddings.py hands
 # it to Neo4j as `vector.dimensions` when creating the vector indexes, so a

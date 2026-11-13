@@ -217,15 +217,19 @@ def chooseSourceWeights(query: str):
 # scripts/eval_search.py before choosing. Recalibrate RERANK_THRESHOLD when
 # the model changes: the score scales differ.
 USE_RERANKER = True
-RERANKER_MODEL_NAME = "cross-encoder/mmarco-mMiniLMv2-L12-H384-v1"
-# RERANKER_MODEL_NAME = "BAAI/bge-reranker-v2-m3"
-RERANK_TOP_N = 20          # candidates re-scored per query
-RERANK_MAX_LENGTH = 384    # tokens of (query + document) seen by the model
+RERANKER_MODEL_NAME = "cross-encoder/ms-marco-MiniLM-L6-v2"
+# - "Qwen/Qwen3-Reranker-0.6B" -> also too slow
+# BAAI bge seems to work well but it's too slow
+# "BAAI/bge-reranker-v2-m3"   # multilingual (IT/EN)
+RERANK_TOP_N = 30          # candidates re-scored per query
+RERANK_MAX_LENGTH = 512    # tokens of (query + document) seen by the model
+# Author mode matches NAMES: a text cross-encoder has nothing to judge there.
+# DISCUSSION
 # Modes reranked BY DEFAULT. Title mode is a known-item lookup on titles
 # (single vague words like "climate" score low on a cross-encoder and would
 # all be pushed to "far"); author mode matches NAMES, nothing to judge.
 # An explicit rerank=True request still reranks title mode (evaluation).
-RERANK_MODES = ("nl", "keywords")
+RERANK_MODES = ("nl", "keywords", "title") # remove "title" ?
 # !!! PLACEHOLDER — calibrate with scripts/calibrate_thresholds.py (column
 # rerank_score). Strong = rerank score >= this.
 RERANK_THRESHOLD = 0.5

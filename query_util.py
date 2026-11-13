@@ -744,8 +744,8 @@ def rerank(query_text, results, top_n=None, threshold=None):
     head, tail = results[:top_n], results[top_n:]
     if not head:
         return results, 0.0
-    start = time.time()
     model = query_config.get_reranker()
+    start = time.time()
     # Raw logits, sigmoid applied here: independent of the library's default
     # activation for single-label models.
     import torch
