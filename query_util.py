@@ -857,8 +857,11 @@ def run_search(query_text, source_k=20, final_k=50, rrf_constant=60,
     results = [_serialize(record) for record in records]
 
     if rerank_results is None:
-        rerank_results = query_config.USE_RERANKER
-    reranked = bool(rerank_results) and mode in query_config.RERANK_MODES
+        # server default: only the modes configured for it
+        reranked = query_config.USE_RERANKER and mode in query_config.RERANK_MODES
+    else:
+        # explicit request (API flag, evaluation): any mode with text to judge
+        reranked = bool(rerank_results) and mode != "author"
     rerank_time = 0.0
     if reranked:
         results, rerank_time = rerank(query_text, results,

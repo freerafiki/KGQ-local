@@ -208,14 +208,24 @@ def chooseSourceWeights(query: str):
 # "strong" from "far" — replacing the raw-score tiering above whenever the
 # reranker runs (the pre-fusion thresholds then only shape the candidate list).
 #
-# CPU cost grows with RERANK_TOP_N x RERANK_MAX_LENGTH: lower either if the
-# search gets too slow.
+# CPU cost grows with model size x RERANK_TOP_N x RERANK_MAX_LENGTH.
+# Measured on the dev laptop (i5-4278U, 2 cores), 20 candidates:
+#   cross-encoder/mmarco-mMiniLMv2-L12-H384-v1 (118M, 384 tok)   ~4 s
+#   BAAI/bge-reranker-v2-m3                    (568M, 512 tok)  ~95 s
+# bge-reranker-v2-m3 is clearly better (esp. Italian query <-> English text)
+# and the one to use on a server with a GPU or many cores; compare both with
+# scripts/eval_search.py before choosing. Recalibrate RERANK_THRESHOLD when
+# the model changes: the score scales differ.
 USE_RERANKER = True
-RERANKER_MODEL_NAME = "BAAI/bge-reranker-v2-m3"   # multilingual (IT/EN)
-RERANK_TOP_N = 30          # candidates re-scored per query
-RERANK_MAX_LENGTH = 512    # tokens of (query + document) seen by the model
-# Author mode matches NAMES: a text cross-encoder has nothing to judge there.
-RERANK_MODES = ("nl", "keywords", "title")
+RERANKER_MODEL_NAME = "cross-encoder/mmarco-mMiniLMv2-L12-H384-v1"
+# RERANKER_MODEL_NAME = "BAAI/bge-reranker-v2-m3"
+RERANK_TOP_N = 20          # candidates re-scored per query
+RERANK_MAX_LENGTH = 384    # tokens of (query + document) seen by the model
+# Modes reranked BY DEFAULT. Title mode is a known-item lookup on titles
+# (single vague words like "climate" score low on a cross-encoder and would
+# all be pushed to "far"); author mode matches NAMES, nothing to judge.
+# An explicit rerank=True request still reranks title mode (evaluation).
+RERANK_MODES = ("nl", "keywords")
 # !!! PLACEHOLDER — calibrate with scripts/calibrate_thresholds.py (column
 # rerank_score). Strong = rerank score >= this.
 RERANK_THRESHOLD = 0.5
