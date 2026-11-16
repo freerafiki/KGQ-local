@@ -3,88 +3,106 @@
 [v-cloak] { display: none; }
 
 :root {
-  --accent: #1a73e8;
-  --border: #dadce0;
-  --muted: #5f6368;
-  --card-border: #e1e4e8;
-  --oi: #1a73e8;
-  --rec: #188038;
-  --gap: #e37400;
-  --prj: #e91e63;
-  /* FormalType badge colors (match index.html) */
-  --paper: #c5221f;
-  --model: #00897b;
-  --plan: #1967d2;
-  --law: #8430ce;
-  --dataset: #b06000;
-  /* Purpose tier: PASTEL chip backgrounds (dark text) — the muted
-     counterpart of index.html's purpose dots; badges keep the
-     saturated tier. */
-  --pv-val-bg: #e8f0fe;
-  --pv-mon-bg: #e6f4ea;
-  --pv-ric-bg: #feefc3;
-  --pv-pre-bg: #f3e8fd;
-  --pv-sup-bg: #e0f7fa;
-  --pv-gov-bg: #eceff1;
-  --pv-gap-bg: #fff3e0;
-  --bg: #fff;
+  /* Same tokens as app.css (science / climate publication look): keep the
+     two in sync. */
+  --serif: "Source Serif 4", "Source Serif Pro", Charter, "Bitstream Charter", Cambria, Georgia, serif;
+  --sans: "Source Sans 3", "Segoe UI", system-ui, -apple-system, Roboto, "Helvetica Neue", Arial, sans-serif;
+  --ink: #1f2e25;
+  --ink-2: #37483d;
+  --muted: #5b6a60;
+  --faint: #8e9a91;
+  --accent: #2f5e3f;
+  --accent-dark: #234a30;
+  --accent-tint: #e6efe8;
+  --bg: #f8f8f3;
+  --surface: #fff;
+  --sand: #eff0e6;
+  --border: #d6dbd2;
+  --card-border: #e1e5dc;
+  --danger: #a63d2f;
+  --oi: #2f5e3f;
+  --rec: #2f6f95;
+  --gap: #b5651d;
+  --prj: #a23e6b;
+  /* FormalType badge colors (match app.css) */
+  --paper: #a2412f;
+  --model: #1f7a78;
+  --plan: #4a52a0;
+  --law: #6a4c93;
+  --dataset: #86691a;
+  /* Purpose tier: the same muted hues as the search page's purpose dots;
+     the chips below tint them into pastel backgrounds. */
+  --pv-val: #5b84b1;
+  --pv-mon: #5f9468;
+  --pv-ric: #c9a046;
+  --pv-pre: #8b6fae;
+  --pv-sup: #4b98a5;
+  --pv-gov: #84918f;
+  --pv-gap: #cd8248;
 }
 * { box-sizing: border-box; }
 body {
-  margin: 0; font-family: Arial, Helvetica, sans-serif;
-  background: var(--bg); color: #202124;
+  margin: 0; font-family: var(--sans);
+  background: var(--bg); color: var(--ink);
   padding: 20px 16px 40px;
 }
 .container { max-width: 880px; margin: 0 auto; }
-.logo { font-size: 20px; letter-spacing: -1px; margin: 0 0 16px; font-weight: 400; }
-.logo b { color: var(--accent); }
+.logo { font-family: var(--serif); font-size: 21px; letter-spacing: -.2px; margin: 0 0 16px; font-weight: 400; color: var(--ink); }
+.logo b { color: var(--accent); font-weight: 600; }
 .logo a { color: inherit; text-decoration: none; }
 .topbar { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 14px; }
 .back {
-  border: 1px solid var(--border); background: #fff; color: #202124;
-  border-radius: 8px; padding: 8px 14px; font-size: 14px; cursor: pointer;
+  border: 1px solid var(--border); background: var(--surface); color: var(--ink);
+  border-radius: 999px; padding: 7px 16px; font: inherit; font-size: 14px; font-weight: 600; cursor: pointer;
   text-decoration: none; display: inline-flex; align-items: center; gap: 6px;
 }
-.back:hover { background: #f1f3f4; }
+.back:hover { background: var(--sand); }
 .header { display: flex; align-items: center; gap: 12px; margin-bottom: 18px; flex-wrap: wrap; }
+/* Type badge: tinted pill, full sentence-case word (same as app.css). */
 .badge {
-  flex-shrink: 0; display: inline-block; min-width: 56px; text-align: center;
-  font-size: 11px; font-weight: 700; letter-spacing: .4px; text-transform: uppercase;
-  color: #fff; border-radius: 12px; padding: 4px 10px;
+  --bc: var(--muted);
+  flex-shrink: 0; display: inline-flex; align-items: center; justify-content: center; gap: 5px;
+  min-width: 104px; white-space: nowrap;
+  font-size: 12.5px; font-weight: 600; line-height: 1.3; letter-spacing: .1px;
+  color: color-mix(in srgb, var(--bc) 82%, #000);
+  background: color-mix(in srgb, var(--bc) 11%, #fff);
+  border: 1px solid color-mix(in srgb, var(--bc) 32%, #fff);
+  border-radius: 999px; padding: 4px 12px 4px 10px;
 }
-.badge.oi { background: var(--oi); }
-.badge.rec { background: var(--rec); }
-.badge.gap { background: var(--gap); }
-.badge.prj { background: var(--prj); }
-.badge.paper { background: var(--paper); }
-.badge.model { background: var(--model); }
-.badge.plan { background: var(--plan); }
-.badge.law { background: var(--law); }
-.badge.dataset { background: var(--dataset); }
-.badge.ft { background: var(--muted); }
+.badge.oi { --bc: var(--oi); }
+.badge.rec { --bc: var(--rec); }
+.badge.gap { --bc: var(--gap); }
+.badge.prj { --bc: var(--prj); }
+.badge.paper { --bc: var(--paper); }
+.badge.model { --bc: var(--model); }
+.badge.plan { --bc: var(--plan); }
+.badge.law { --bc: var(--law); }
+.badge.dataset { --bc: var(--dataset); }
+.badge.ft { --bc: var(--muted); }
 /* The header badge is a link into the matching filter facet
    (index.html?docType=... for documents/Project, ?include=... for
    Indications/Gap) when the doc type is known. */
 a.badge { text-decoration: none; cursor: pointer; }
-a.badge:hover { filter: brightness(.92); }
+a.badge:hover { background: color-mix(in srgb, var(--bc) 20%, #fff); }
 /* Badge icon: <use> into the inline Lucide sprite at the top of <body>;
    stroke styling is inherited through the <use> shadow tree. Works for
-   both the header badge (white on color) and link badges (colored text). */
+   both the header pill badge and link badges (colored text). */
 .bic {
-  width: 11px; height: 11px; vertical-align: -1px; margin-right: 4px;
-  fill: none; stroke: currentColor; stroke-width: 2.2;
+  width: 12px; height: 12px; vertical-align: -1px; margin-right: 4px; flex-shrink: 0;
+  fill: none; stroke: currentColor; stroke-width: 2;
   stroke-linecap: round; stroke-linejoin: round;
 }
-.name { font-size: 20px; font-weight: 600; color: var(--accent); line-height: 1.35; }
+.badge .bic { margin-right: 0; }
+.name { font-family: var(--serif); font-size: 25px; font-weight: 600; color: var(--ink); line-height: 1.3; }
 .section {
-  border: 1px solid var(--card-border); border-radius: 10px;
-  padding: 14px 16px; margin-bottom: 16px;
+  background: var(--surface); border: 1px solid var(--card-border); border-radius: 8px;
+  padding: 14px 18px; margin-bottom: 16px;
 }
 .section h2 {
-  margin: 0 0 10px; font-size: 13px; font-weight: 700;
-  color: var(--muted); text-transform: uppercase; letter-spacing: .5px;
+  margin: 0 0 10px; font-size: 12px; font-weight: 600;
+  color: var(--muted); text-transform: uppercase; letter-spacing: .7px;
 }
-table.props { width: 100%; border-collapse: collapse; font-size: 14px; }
+table.props { width: 100%; border-collapse: collapse; font-size: 14.5px; line-height: 1.55; color: var(--ink-2); }
 table.props td { padding: 6px 8px; vertical-align: top; border-top: 1px solid var(--card-border); }
 table.props td.k {
   width: 38%; color: var(--muted); font-size: 13px; font-weight: 600;
@@ -92,23 +110,24 @@ table.props td.k {
 table.props td.v { overflow-wrap: anywhere; }
 .tags { display: flex; flex-wrap: wrap; gap: 6px; }
 .tag {
-  display: inline-block; background: #e8f0fe; color: #174ea6;
-  font-size: 12px; padding: 3px 10px; border-radius: 12px;
+  display: inline-block; background: var(--accent-tint); color: var(--accent-dark);
+  border: 1px solid color-mix(in srgb, var(--accent) 22%, #fff);
+  font-size: 12px; padding: 2px 10px; border-radius: 999px;
 }
 /* Purpose chips link into the matching Purpose facet
    (index.html?purpose=...). */
 a.tag { text-decoration: none; }
 a.tag:hover { text-decoration: underline; }
 /* Purpose chips: pastel bg + neutral dark text (muted tier) */
-.tag.pv-val { background: var(--pv-val-bg); }
-.tag.pv-mon { background: var(--pv-mon-bg); }
-.tag.pv-ric { background: var(--pv-ric-bg); }
-.tag.pv-pre { background: var(--pv-pre-bg); }
-.tag.pv-sup { background: var(--pv-sup-bg); }
-.tag.pv-gov { background: var(--pv-gov-bg); }
-.tag.pv-gap { background: var(--pv-gap-bg); }
+.tag.pv-val { background: color-mix(in srgb, var(--pv-val) 16%, #fff); border-color: color-mix(in srgb, var(--pv-val) 38%, #fff); }
+.tag.pv-mon { background: color-mix(in srgb, var(--pv-mon) 16%, #fff); border-color: color-mix(in srgb, var(--pv-mon) 38%, #fff); }
+.tag.pv-ric { background: color-mix(in srgb, var(--pv-ric) 16%, #fff); border-color: color-mix(in srgb, var(--pv-ric) 38%, #fff); }
+.tag.pv-pre { background: color-mix(in srgb, var(--pv-pre) 16%, #fff); border-color: color-mix(in srgb, var(--pv-pre) 38%, #fff); }
+.tag.pv-sup { background: color-mix(in srgb, var(--pv-sup) 16%, #fff); border-color: color-mix(in srgb, var(--pv-sup) 38%, #fff); }
+.tag.pv-gov { background: color-mix(in srgb, var(--pv-gov) 16%, #fff); border-color: color-mix(in srgb, var(--pv-gov) 38%, #fff); }
+.tag.pv-gap { background: color-mix(in srgb, var(--pv-gap) 16%, #fff); border-color: color-mix(in srgb, var(--pv-gap) 38%, #fff); }
 .tag.pv-val, .tag.pv-mon, .tag.pv-ric, .tag.pv-pre,
-.tag.pv-sup, .tag.pv-gov, .tag.pv-gap { color: #3c4043; }
+.tag.pv-sup, .tag.pv-gov, .tag.pv-gap { color: var(--ink-2); }
 .empty { color: var(--muted); font-size: 13px; }
 .actor-list, .link-list { list-style: none; margin: 0; padding: 0; }
 .actor-list li { font-size: 14px; padding: 4px 0; }
@@ -117,19 +136,21 @@ a.tag:hover { text-decoration: underline; }
 .actor-list a:hover { text-decoration: underline; }
 .link-item {
   display: block; border: 1px solid var(--card-border); border-radius: 8px;
-  padding: 10px 12px; margin-bottom: 8px; text-decoration: none; color: #202124;
+  background: var(--surface); padding: 10px 14px; margin-bottom: 8px; text-decoration: none; color: var(--ink);
+  transition: border-color .15s, box-shadow .15s;
 }
-.link-item:hover { background: #f8f9fa; border-color: var(--accent); }
-.link-item .l-badge { font-size: 11px; font-weight: 700; margin-right: 8px; }
+.link-item:hover { border-color: color-mix(in srgb, var(--accent) 45%, #fff); box-shadow: 0 2px 8px rgba(31,46,37,.08); }
+.link-item .l-badge { font-size: 12px; font-weight: 600; margin-right: 8px; }
 .l-badge.oi { color: var(--oi); } .l-badge.rec { color: var(--rec); } .l-badge.gap { color: var(--gap); } .l-badge.prj { color: var(--prj); }
 .l-badge.paper { color: var(--paper); } .l-badge.model { color: var(--model); } .l-badge.plan { color: var(--plan); }
 .l-badge.law { color: var(--law); } .l-badge.dataset { color: var(--dataset); }
-.link-item .l-title { font-weight: 600; color: var(--accent); }
+.link-item .l-title { font-family: var(--serif); font-size: 15.5px; font-weight: 600; color: var(--ink); }
+.link-item:hover .l-title { color: var(--accent); }
 .link-item .l-snippet { color: var(--muted); font-size: 13px; margin-top: 4px; overflow-wrap: anywhere; }
 .link-item .l-rel { font-size: 12px; color: var(--muted); margin-top: 4px; }
 .l-rel a { color: var(--accent); text-decoration: none; }
 .l-rel a:hover { text-decoration: underline; }
-.error { color: #d93025; text-align: center; padding: 40px 0; }
+.error { color: var(--danger); text-align: center; padding: 40px 0; }
 .loading { color: var(--muted); text-align: center; padding: 40px 0; }
 .sub { font-size: 13px; color: var(--muted); }
 /* Overview rows (C2/A1/A2/A3a/A3b/C3/A4/actors) reuse the props table. */

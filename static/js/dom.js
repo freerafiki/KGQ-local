@@ -11,7 +11,7 @@ export const BADGE_CLASS = {
 
 export const BADGE_SHORT = {
   'Oggetto Informativo': 'Document',
-  'Raccomandazione':     'Ind',
+  'Raccomandazione':     'Indication',
   'Lacuna':              'Gap',
   'Progetto':            'Project',
 };
@@ -54,9 +54,121 @@ export function nameOf(r) {
   return r.officialTitle || r.title || r.content || r.description || 'Unnamed result';
 }
 
+// ---- ALL-CAPS titles -> Title Case -----------------------------------------
+// Many legacy titles are stored in capitals ("THE ORIGIN OF THE SAND IN THE
+// VENICE LAGOON"). Sentence case would destroy the proper nouns (venice,
+// adriatic, ...), which cannot be told apart from ordinary words once the
+// text is all caps, so we use Title Case instead (John Gruber's titlecase
+// rules): every word capitalised except small words, which stay lowercase
+// unless they open the title or follow ':' '.' '–'.
+// Only "shouting" titles are touched (most words in capitals), and in
+// those only the fully capitalised words: mixed-case words such as species
+// names ("Hexaplex trunculus") or "PCBs" are kept exactly as written.
+// Acronyms cannot be detected from capitals alone; known ones are listed
+// below (extend the list when a new one shows up wrongly cased).
+const ACRONYMS = new Map(Object.entries({
+  ARPAV: 'ARPAV', CNR: 'CNR', CORILA: 'CORILA', CVM: 'CVM', DEM: 'DEM',
+  DNA: 'DNA', ELGIRA: 'ELGIRA', ESA: 'ESA', EU: 'EU', GIS: 'GIS', GPS: 'GPS', HF: 'HF',
+  ICZM: 'ICZM', IPCC: 'IPCC', ISPRA: 'ISPRA', IUCN: 'IUCN', LIDAR: 'LiDAR',
+  MDDS: 'MDDS', MOSE: 'MOSE', MSFD: 'MSFD', NASA: 'NASA', PAHS: 'PAHs',
+  PCBS: 'PCBs', POPS: 'POPs', SAR: 'SAR', SIDEV: 'SIDEV', SLR: 'SLR',
+  UE: 'UE', UNEP: 'UNEP', UNESCO: 'UNESCO', VELFEEM: 'VELFEEM', WFD: 'WFD',
+}));
+const SMALL_WORDS = new Set([
+  // English
+  'a', 'an', 'and', 'as', 'at', 'but', 'by', 'for', 'from', 'in', 'into',
+  'nor', 'of', 'on', 'onto', 'or', 'per', 'the', 'to', 'via', 'vs', 'with',
+  'et', // Latin, in species authorities ("Tomlinson et Posluzny")
+  // Italian
+  'ai', 'al', 'alla', 'alle', 'con', 'da', 'dai', 'dal', 'dalla', 'dei',
+  'degli', 'del', 'della', 'delle', 'di', 'e', 'ed', 'fra', 'gli', 'il',
+  'la', 'le', 'lo', 'nei', 'nel', 'nella', 'nelle', 'su', 'sul', 'sulla', 'tra',
+]);
+// Italian elisions keep a capital after the apostrophe (Sant'Erasmo,
+// Dell'Ambiente); English possessives do not (Lagoon's).
+const ELIDED = new Set(['all', 'dall', 'dell', 'nell', 'sull', 'sant', 'l', 'd', 'un']);
+// Roman numerals of 2+ letters (II, XVI, LXIII); D and M are left out so
+// that words like "DI" are never mistaken for one.
+const ROMAN = /^(?=[IVXLC]{2,}$)C{0,3}(XC|XL|L?X{0,3})(IX|IV|V?I{0,3})$/;
+
+const isCaps = w => /[A-ZÀ-Þ]/.test(w) && w === w.toUpperCase();
+const cap = w => w.charAt(0).toUpperCase() + w.slice(1);
+
+function isShouting(text) {
+  const words = String(text).match(/[A-Za-zÀ-ÿ]{2,}/g) || [];
+  return words.length > 0 && words.filter(isCaps).length / words.length >= 0.6;
+}
+
+// One letters-only chunk (no hyphens/apostrophes) of an all-caps word.
+function caseChunk(chunk, smallAllowed) {
+  if (ACRONYMS.has(chunk)) return ACRONYMS.get(chunk);
+  if (ROMAN.test(chunk)) return chunk;
+  if (/\d/.test(chunk)) return chunk;                  // 3D, PM10, CO2
+  const lower = chunk.toLowerCase();
+  if (smallAllowed && SMALL_WORDS.has(lower)) return lower;  // a, e, the, di
+  if (chunk.length === 1) return chunk;
+  return cap(lower);
+}
+
+// An all-caps word, possibly hyphenated (Two-Dimensional, Re-Use) or with an
+// apostrophe (Microlayer's, Sant'Erasmo).
+function caseWord(word, smallAllowed) {
+  return word.split('-').map((part, i) => {
+    const [head, ...rest] = part.split(/(['’])/);
+    let out = caseChunk(head, smallAllowed && i === 0);
+    for (let j = 0; j < rest.length; j += 2) {
+      const tail = rest[j + 1] || '';
+      out += rest[j] + (ELIDED.has(head.toLowerCase()) ? cap(tail.toLowerCase()) : tail.toLowerCase());
+    }
+    return out;
+  }).join('-');
+}
+
+export function displayTitle(text) {
+  const str = String(text == null ? '' : text);
+  if (!isShouting(str)) return str;
+  let sentenceStart = true;
+  return str.split(/(\s+)/).map(tok => {
+    if (/^\s+$/.test(tok) || tok === '') return tok;
+    // Split off leading/trailing punctuation: ("VENICE, ...  'VENICE
+    const m = tok.match(/^([^A-Za-zÀ-ÿ0-9]*)(.*?)([^A-Za-zÀ-ÿ0-9]*)$/);
+    const [, lead, core, trail] = m;
+    let out = core;
+    // Initials stay as written: "A." (Tomasin A.), "J.D" (J.D. Paduan),
+    // "S." (S. Erasmo). A word glued to a hyphen ("DI-") is a prefix, not
+    // a small word.
+    const initials = /^[A-Z](\.[A-Z])*$/.test(core) && trail.startsWith('.');
+    if (core && isCaps(core) && !initials) out = caseWord(core, !sentenceStart && !trail.startsWith('-'));
+    if (core) sentenceStart = /[:.?!]$/.test(trail);
+    else sentenceStart = sentenceStart || /^[–—:-]$/.test(tok);
+    return lead + out + trail;
+  }).join('');
+}
+
 export function truncate(s, maxLen) {
   const str = String(s == null ? '' : s);
   return str.length > maxLen ? str.slice(0, maxLen - 1) + '\u2026' : str;
+}
+
+// DOI document type (Crossref-style 'journal-article', DataCite-style
+// 'JournalArticle', ...) -> readable label. Unknown values are split on
+// dashes/camelCase and sentence-cased; '' when absent.
+const DOC_TYPE_LABEL = {
+  'journal-article':     'Journal article',
+  'journalarticle':      'Journal article',
+  'book-chapter':        'Book chapter',
+  'edited-book':         'Edited book',
+  'posted-content':      'Preprint',
+  'proceedings-article': 'Proceedings article',
+};
+export function prettyDocType(raw) {
+  if (!raw) return '';
+  const s = String(raw).trim();
+  const known = DOC_TYPE_LABEL[s.toLowerCase()];
+  if (known) return known;
+  const words = s.replace(/([a-z])([A-Z])/g, '$1 $2').split(/[-_\s]+/).filter(Boolean);
+  const text = words.join(' ').toLowerCase();
+  return text.charAt(0).toUpperCase() + text.slice(1);
 }
 
 // Preview is a truncated (CSS-clamped) glance; `.full` shows the whole text.

@@ -4,7 +4,7 @@
 import { computed, ref } from '../../vendor/vue.esm-browser.prod.js';
 import {
   BADGE_CLASS, BADGE_SHORT, formalBadge, nameOf, truncate,
-  previewText, fullFields, scoreParts,
+  previewText, fullFields, scoreParts, prettyDocType, displayTitle,
 } from '../dom.js';
 
 export default {
@@ -36,24 +36,30 @@ export default {
       return formalBadge(r.formalType) || 'Document';
     });
 
-    const name = computed(() => truncate(nameOf(props.result), 180));
+    const name = computed(() => truncate(displayTitle(nameOf(props.result)), 180));
     const preview = computed(() => previewText(props.result));
     const fields = computed(() => fullFields(props.result));
 
-    // Reference person = the first contributing person (a result may have
-    // none: institutions only, or no actors at all). The `r.people || r.actors`
-    // fallback only fires when the split is missing (older stored payloads),
-    // never when `people` is an empty list.
-    const refPerson = computed(() => {
-      const r = props.result;
-      return (r.people || r.actors || [])[0] || '';
-    });
-    const year = computed(() => props.result.releaseYear || '');
+    // Indication / Gap cards: no headline (their "title" is just their body
+    // text) and no info line (author, year, ... belong to the parent document).
+    const isChild = computed(() =>
+      props.result.type === 'Raccomandazione' || props.result.type === 'Lacuna');
 
+    // Info line under the card: First author | Year | Type | Journal, each
+    // part only when present. firstAuthor/docType/journal are sent for
+    // documents only (see query_util._serialize).
     const metaBits = computed(() => {
+      const r = props.result;
+      if (isChild.value) return [];
       const bits = [];
-      if (refPerson.value) bits.push({ label: 'Reference person:', text: truncate(refPerson.value, 80) });
-      if (year.value) bits.push({ label: 'Year:', text: String(year.value) });
+      if (r.firstAuthor) bits.push({ label: 'First author:', text: truncate(r.firstAuthor, 80) });
+      // Documents always show the year slot ("-" when neither the release
+      // year nor the DOI year is known); Projects only when they have one.
+      const isDoc = r.type === 'Oggetto Informativo';
+      if (r.releaseYear || isDoc) bits.push({ label: 'Year:', text: r.releaseYear ? String(r.releaseYear) : '-' });
+      const docType = prettyDocType(r.docType);
+      if (docType) bits.push({ label: 'Type:', text: docType });
+      if (r.journal) bits.push({ label: 'Journal:', text: truncate(r.journal, 100) });
       return bits;
     });
 
@@ -68,7 +74,7 @@ export default {
     const parentTitle = computed(() => {
       const r = props.result;
       if (r.type === 'Oggetto Informativo' || !r.parent_oi) return '';
-      return truncate(r.parent_oi.officialTitle || r.parent_oi.title, 120);
+      return truncate(displayTitle(r.parent_oi.officialTitle || r.parent_oi.title), 120);
     });
     const parentType = computed(() => {
       const r = props.result;
@@ -96,15 +102,18 @@ export default {
     const scoreLine = computed(() => scoreParts(props.result, props.ftMin, props.ftMax));
 
     return {
-      open, badgeClass, badgeText, name, preview, fields,
+      open, badgeClass, badgeText, name, preview, fields, isChild,
       metaBits, showParent, parentTitle, parentType, whyText, wrrf, rerankScore, scoreLine,
     };
   },
   template: `
 <div class="card" :class="{ open: open }" @click="$emit('open', result.neo4j_id)">
   <div v-if="showParent" class="parent-row parent-top"><span v-if="parentType" class="plabel">{{ parentType }}:</span> {{ parentTitle }}</div>
-  <div class="card-head"><span class="name">{{ name }}</span><span class="badge" :class="badgeClass"><svg class="bic" aria-hidden="true"><use :href="'#ic-' + badgeClass"></use></svg>{{ badgeText }}</span></div>
-  <div class="preview">{{ preview }}</div>
+  <div v-if="isChild" class="card-head child-head"><div class="preview">{{ preview }}</div><span class="badge" :class="badgeClass"><svg class="bic" aria-hidden="true"><use :href="'#ic-' + badgeClass"></use></svg>{{ badgeText }}</span></div>
+  <template v-else>
+    <div class="card-head"><span class="name">{{ name }}</span><span class="badge" :class="badgeClass"><svg class="bic" aria-hidden="true"><use :href="'#ic-' + badgeClass"></use></svg>{{ badgeText }}</span></div>
+    <div class="preview">{{ preview }}</div>
+  </template>
   <div class="full"><div v-for="f in fields" :key="f.label" class="field"><span v-if="f.label" class="flabel">{{ f.label }}</span> {{ f.text }}</div></div>
   <button type="button" class="toggle" @click.stop="open = !open">{{ open ? 'Show less' : 'Show more' }}</button>
   <div v-if="metaBits.length" class="card-meta"><template v-for="(bit, i) in metaBits" :key="bit.label"><span v-if="i" class="msep">|</span><span class="mlabel">{{ bit.label }}</span> {{ bit.text }}</template></div>

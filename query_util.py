@@ -261,6 +261,8 @@ RETURN
     n.description AS description,
     n.releaseYear AS releaseYear,
     oiParent.releaseYear AS parentReleaseYear,
+    n.DOI_year AS doiYear,
+    oiParent.DOI_year AS parentDoiYear,
     row.sources AS sources,
     row.sourceRanks AS sourceRanks,
     row.rawScores AS rawScores,
@@ -271,7 +273,7 @@ RETURN
     oiParent.id AS parentId,
     labels(oiParent) AS parentLabels,
     elementId(oiParent) AS parentNeo4jId,
-    head([(oiParent)-[:has_formal_type]->(pft:FormalType) | properties(pft)]) AS parentFormalTypeProps,
+    head([(oiParent)-[:has_formal_type|formal_type]->(pft:FormalType) | properties(pft)]) AS parentFormalTypeProps,
     parentMainPurposeNames AS parentMainPurposeNames,
     actorEntries AS actorEntries,
     phenomenonNames AS phenomenonNames,
@@ -280,7 +282,15 @@ RETURN
     parentPhenomenonNames AS parentPhenomenonNames,
     parentTopicNames AS parentTopicNames,
     parentGeoAreaNames AS parentGeoAreaNames,
-    head([(n)-[:has_formal_type]->(ft:FormalType) | properties(ft)]) AS formalTypeProps,
+    head([(n)-[:has_formal_type|formal_type]->(ft:FormalType) | properties(ft)]) AS formalTypeProps,
+    // Card info line (documents only): first author with fallbacks, DOI
+    // document type and journal. Authors live on (Author)-[:author_contrib
+    // {role}]->, not on ContributionActor.
+    n.first_author AS firstAuthorDoi,
+    head([(a:Author)-[ra:author_contrib]->(n) WHERE ra.role = 'main' | a.name]) AS mainAuthor,
+    head([(a2:Author)-[:author_contrib]->(n) | a2.name]) AS anyAuthor,
+    n.DOI_doc_type AS doiDocType,
+    head([(n)-[:published]->(j:Journal) | j.name]) AS journal,
     row.wrrf AS wrrf,
     row.strongWrrf AS strongWrrf,
     row.passed AS passed,
@@ -606,6 +616,14 @@ def _split_actors(entries):
     return actors, people, institutions
 
 
+def _year_of(release_year, doi_year):
+    """A 4-digit release year as a string, else the DOI year, else None."""
+    raw = str(release_year).strip() if release_year is not None else ''
+    if len(raw) == 4 and raw.isdigit():
+        return raw
+    return str(doi_year) if doi_year else None
+
+
 def _serialize(record):
     """Turn a raw Neo4j record (w/ Node) into a plain JSON-able dict."""
     sources = record['sources']
@@ -655,7 +673,12 @@ def _serialize(record):
         # Release year of the Contribution (the card shows it). Rec/Gap nodes
         # carry no year of their own, so they take the source document's;
         # Projects have neither -> None, and the card simply shows no year.
-        "releaseYear": record['releaseYear'] or record['parentReleaseYear'],
+        # releaseYear is often a placeholder ("Applicabile", "Non
+        # applicabile") rather than a year: then the DOI year is used, else
+        # None (the card shows "Year: -").
+        "releaseYear": (_year_of(record['releaseYear'], record['doiYear'])
+                        or _year_of(record['parentReleaseYear'],
+                                    record['parentDoiYear'])),
     }
     entry["doc_key"] = _doc_key(labels, record)
     if entry["type"] == "Oggetto Informativo":
@@ -667,6 +690,12 @@ def _serialize(record):
             # Dataset badge on the result card (falls back to "Document"
             # when absent).
             "formalType": _formal_type_text(record['formalTypeProps']),
+            # Card info line: DOI first_author, else the 'main' Author, else
+            # any Author. docType stays raw (the frontend prettifies it).
+            "firstAuthor": (record['firstAuthorDoi'] or record['mainAuthor']
+                            or record['anyAuthor']),
+            "docType": record['doiDocType'],
+            "journal": record['journal'],
         })
     elif entry["type"] == "Raccomandazione":
         entry.update({"content": record['content'], "motivation": record['motivation']})
@@ -1281,7 +1310,7 @@ def get_node_detail(element_id):
             "WHERE elementId(n) = $eid "
             "RETURN type(r) AS rel, elementId(parent) AS peid, "
             "labels(parent) AS plabels, properties(parent) AS pprops, "
-            "head([(parent)-[:has_formal_type]->(ft:FormalType) | properties(ft)]) AS ftprops",
+            "head([(parent)-[:has_formal_type|formal_type]->(ft:FormalType) | properties(ft)]) AS ftprops",
             eid=element_id, database_=NEO4J_GRAPH, routing_=RoutingControl.READ)
         eids = [r["peid"] for r in prows]
         purposes = _fetch_purposes(eids)

@@ -11,7 +11,7 @@
 //   entities            -> node.html?eid=...              (their node page)
 
 import { createApp, computed, onMounted, ref } from '../vendor/vue.esm-browser.prod.js';
-import { BADGE_CLASS, BADGE_SHORT, formalBadge, truncate, PURPOSE_CLASS } from './dom.js';
+import { BADGE_CLASS, BADGE_SHORT, formalBadge, truncate, PURPOSE_CLASS, displayTitle } from './dom.js';
 // The type taxonomy (value <-> graph type pairing, and which filter group
 // owns the entry) is the search page's filter data; importing it keeps the
 // facet links from drifting out of sync.
@@ -177,7 +177,7 @@ function briefCard(brief) {
     href: nodeHref(brief.eid),
     badgeClass: word ? word.toLowerCase() : (BADGE_CLASS[brief.type] || 'ft'),
     badgeText: word || (BADGE_SHORT[brief.type] || 'FT'),
-    title: brief.title || brief.content || brief.description || 'Node',
+    title: displayTitle(brief.title || brief.content || brief.description || 'Node'),
     snippet: truncate(brief.title || brief.content || brief.description || 'No text', 180),
     rel: brief.rel || '',
     purposes: (brief.purposes || []).join(', '),
@@ -208,8 +208,9 @@ const NodePage = {
       if (!d) return null;
       const props = d.properties || {};
       const related = d.related || {};
-      const name = props.officialTitle || props.title || props.content || props.name
-        || props.description || 'Unnamed node';
+      // Header only: the Details table below keeps the stored spelling.
+      const name = displayTitle(props.officialTitle || props.title || props.content || props.name
+        || props.description || 'Unnamed node');
       const ftBucket = related.formalType;
       const ftRaw = d.formalType
         || (ftBucket && ftBucket.items && ftBucket.items[0] ? ftBucket.items[0].label : '')
