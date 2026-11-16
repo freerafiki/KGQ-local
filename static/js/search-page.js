@@ -5,17 +5,17 @@
 // call, the mode tabs and the two child components (cards, contributor facets).
 
 import {
-  createApp, computed, onMounted, ref, toRefs,
+  createApp, computed, onMounted, onBeforeUnmount, nextTick, reactive, ref, toRefs, watch,
 } from '../vendor/vue.esm-browser.prod.js';
 import {
   store, visibleResults, groupedResults, strongGroups, farGroups, farCount,
   saveState, restoreState, pruneFacets,
   FORMAL_ENTRIES, PROJECT_ENTRIES, INCLUDE_ENTRIES, PURPOSE_ENTRIES,
   TAXONOMY_GROUPS,
-  MODE_ENTRIES, isMode, modeLabel, yearDomain, filterCounts,
+  MODE_ENTRIES, DEFAULT_MODE, isMode, modeLabel, yearDomain, filterCounts,
 } from './state.js';
 import { fetchSearch } from './api.js';
-import { ftBounds, clampInt } from './dom.js';
+import { ftBounds, clampInt, queryTerms } from './dom.js';
 import ResultCard from './components/result-card.js';
 import ActorFacet from './components/actor-facet.js';
 
@@ -96,7 +96,7 @@ function applyUrlFilters(url) {
 function syncUrl() {
   const params = new URLSearchParams();
   if (store.submittedQuery) params.set('q', store.submittedQuery);
-  if (store.mode !== 'nl') params.set('mode', store.mode);
+  if (store.mode !== DEFAULT_MODE) params.set('mode', store.mode);
   // Filter selections that differ from the all-ticked default ride along, so
   // a copied URL reopens the same view. (They are rewritten on each search —
   // toggling a box alone does not touch the URL yet.)
@@ -180,9 +180,41 @@ const SearchPage = {
     // "searched:" / "searched in Title:" — the mode comes from the server
     // echo, so the summary states what actually ran.
     const searchPrefix = computed(() =>
-      store.submittedMode !== 'nl'
+      store.submittedMode !== DEFAULT_MODE
         ? 'searched in ' + modeLabel(store.submittedMode) + ':'
         : 'searched:');
+
+    // Words to highlight in the cards: only for results of a word mode
+    // (Natural language can match by meaning, with no shared word).
+    const HIGHLIGHT_MODES = ['title', 'keywords', 'author'];
+    const hlTerms = computed(() =>
+      HIGHLIGHT_MODES.includes(store.submittedMode) ? queryTerms(store.submittedQuery) : []);
+
+    // The line under the tabs describing the selected mode.
+    const modeHint = computed(() => {
+      const entry = MODE_ENTRIES.find(m => m.value === store.mode);
+      return entry ? entry.hint : '';
+    });
+
+    // Sliding highlight behind the selected tab: one absolutely positioned
+    // pill whose left/width follow the selected button, so switching tabs
+    // animates the rounded overlay (CSS transition on left/width). `ready`
+    // turns the transition on only after the first placement, so the pill
+    // does not fly in from the left edge when the page loads.
+    const tabsEl = ref(null);
+    const indicator = reactive({ left: 0, width: 0, ready: false });
+    function placeIndicator() {
+      const el = tabsEl.value;
+      const btn = el && el.querySelector('[aria-selected="true"]');
+      if (!btn) return;
+      indicator.left = btn.offsetLeft;
+      indicator.width = btn.offsetWidth;
+      if (!indicator.ready) requestAnimationFrame(() => { indicator.ready = true; });
+    }
+    watch(() => store.mode, () => nextTick(placeIndicator));
+    // Web fonts / window width change the button sizes.
+    window.addEventListener('resize', placeIndicator);
+    onBeforeUnmount(() => window.removeEventListener('resize', placeIndicator));
 
     // `queryArg` is passed when re-running a query that is already on screen
     // (tab switch, deep link); otherwise the search bar is the query.
@@ -256,6 +288,8 @@ const SearchPage = {
     }
 
     onMounted(() => {
+      nextTick(placeIndicator);
+      if (document.fonts && document.fonts.ready) document.fonts.ready.then(placeIndicator);
       const url = readUrlQuery();
       applyUrlFilters(url);            // purpose/docType/include narrow the groups
       if (url.q) {
@@ -287,6 +321,7 @@ const SearchPage = {
       groups: groupedResults,
       strongGroups, farGroups, farCount,
       ft, countText, embedTime, searchTime, rerankTime, searchPrefix,
+      modeHint, tabsEl, indicator, hlTerms,
       // Filter entry counts (whole result set) + the Time slider state.
       counts: filterCounts,
       yearDomain, yearFrom, yearTo, rangeFill, setYearFrom, setYearTo,

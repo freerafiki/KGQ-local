@@ -131,36 +131,65 @@ function tickAll(values) {
   return Object.fromEntries(values.map(v => [v, true]));
 }
 
-// Name order for the People facet: compare the LAST word of each name so
-// authors list by surname ("Ada Rossi" sorts under Rossi). The full name is
-// the tie-break, keeping same-surname authors in given-name order; the
-// last-word rule also copes with particles ("Anna de Marchi" -> Marchi).
+// Name order for the Authors facet. Author names are canonical
+// "Surname Initials" ("Torresan S.", "Dal Barco M.", "Amos C.L.",
+// "Barausse Alb."), so the surname is the name minus its trailing block of
+// initials; particles stay in it ("Dal Barco" files under D). Accents and
+// case are ignored ("Sánchez" next to "Sanchez"); the full name breaks ties
+// ("Rossi A." before "Rossi M."). Names without an initials block are not
+// canonical — mostly affiliation fragments left by extraction — and are
+// listed after all real authors, A-Z among themselves.
+const INITIALS_TAIL = /\s+[A-ZÀ-Ý][a-zà-ÿ]{0,5}\.(\s?-?[A-ZÀ-Ý][a-zà-ÿ]{0,5}\.)*$/;
+const collate = new Intl.Collator('it', { sensitivity: 'base' }).compare;
+
+function surnameOf(name) {
+  const n = String(name).trim();
+  const m = n.match(INITIALS_TAIL);
+  return m ? n.slice(0, m.index) : null;   // null = not a canonical name
+}
+
 export function bySurname(a, b) {
-  const last = n => {
-    const parts = String(n).trim().split(/\s+/);
-    return parts[parts.length - 1];
-  };
-  return last(a).localeCompare(last(b)) || a.localeCompare(b);
+  const sa = surnameOf(a);
+  const sb = surnameOf(b);
+  if ((sa === null) !== (sb === null)) return sa === null ? 1 : -1;
+  return collate(sa ?? a, sb ?? b) || collate(a, b);
 }
 
 // The two contributor facets share one shape: a searchable checkbox list
 // (live substring query + OR-ed selections), reading a different payload
 // field. They are combined with AND — see visibleResults below. `compare`
-// orders the offered list: People by surname, Institutions plain A-Z (an
+// orders the offered list: Authors by surname, Institutions plain A-Z (an
 // organisation has no surname to key on — its whole string is the name).
+// Only the TITLE says "Authors": the key `person` and the payload field
+// `people` keep their names.
 export const FACET_ENTRIES = [
-  { key: 'person',      field: 'people',       title: 'People',      emptyMsg: 'No matching people.',      compare: bySurname },
+  { key: 'person',      field: 'people',       title: 'Authors',     emptyMsg: 'No matching authors.',     compare: bySurname },
   { key: 'institution', field: 'institutions', title: 'Institutions', emptyMsg: 'No matching institutions.', compare: (a, b) => a.localeCompare(b) },
 ];
 
 // The search modes shown as tabs above the search bar, in display order.
 // `value` is what the API expects (query_util.SEARCH_MODES), `label` is the
-// tab text. The order is presentation only: `nl` stays the default mode.
+// tab text, `tag` an optional superscript on it, `hint` the line shown under
+// the tabs while the mode is selected. What each mode searches
+// (query_util._build_cypher):
+//   title     BM25 word match on title_fulltext: Italian title (A1),
+//             official title (C2), subtitle, project name
+//   author    BM25 on authors_fulltext (Author / Institution names)
+//   nl        hybrid: the keywords index + authors + every vector index
+//             (embedding similarity), fused; reranked when enabled
+//   keywords  BM25 word match on search_fulltext: official title, subtitle,
+//             abstract, findings, indication text/motivation, gap text,
+//             project description (not the Italian A1 title)
+export const DEFAULT_MODE = 'title';
 export const MODE_ENTRIES = [
-  { value: 'title',    label: 'Title' },
-  { value: 'author',   label: 'Authors' },
-  { value: 'nl',       label: 'Natural language' },
-  { value: 'keywords', label: 'Keywords' },
+  { value: 'title',    label: 'Title',
+    hint: 'Search based on matching words in the titles' },
+  { value: 'author',   label: 'Authors',
+    hint: 'Search based only on authors' },
+  { value: 'nl',       label: 'Natural language', tag: 'exp',
+    hint: 'Experimental: search based on semantic similarity (meaning, not exact words)' },
+  { value: 'keywords', label: 'Keywords',
+    hint: 'Keyword-based search in titles, abstracts, findings, indications and gaps' },
 ];
 
 export function isMode(value) {
@@ -178,8 +207,8 @@ export const store = reactive({
   // Request / response
   query: '',            // live content of the search bar
   submittedQuery: '',   // the query the current results answer to
-  mode: 'nl',           // selected tab: mode of the NEXT request
-  submittedMode: 'nl',  // mode the current results came from (server echo)
+  mode: DEFAULT_MODE,           // selected tab: mode of the NEXT request
+  submittedMode: DEFAULT_MODE,  // mode the current results came from (server echo)
   phase: 'idle',        // idle -> loading -> done | error
   error: '',
   results: [],          // FULL result set from the API (filters apply client-side)

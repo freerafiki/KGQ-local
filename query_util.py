@@ -256,6 +256,7 @@ RETURN
     n AS n,
     n.title AS title,
     n.officialTitle AS officialTitle,
+    n.subtitle AS subtitle,
     n.name AS name,
     n.id_num AS id_num,
     n.description AS abstract,
@@ -692,6 +693,9 @@ def _serialize(record):
         entry.update({
             "abstract": record['abstract'],
             "findings": record['findings'],
+            # Indexed by search_fulltext / title_fulltext: sent so the card
+            # can show (and highlight) a match that is only in the subtitle.
+            "subtitle": record['subtitle'],
             "submission_id": record['id'],
             # Raw FormalType text; drives the short Paper/Model/Plan/Norm/
             # Dataset badge on the result card (falls back to "Document"

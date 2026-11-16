@@ -81,22 +81,46 @@
     .mode-tabs {
       display: flex; justify-content: center; align-items: center; gap: 4px;
       flex: 0 0 auto;
-      width: fit-content; max-width: 100%; margin: -4px auto 12px;
+      position: relative;
+      width: fit-content; max-width: 100%; margin: -4px auto 0;
       padding: 4px; background: var(--sand); border: 1px solid var(--card-border);
       border-radius: 999px; overflow-x: auto; scrollbar-width: none;
     }
     .mode-tabs::-webkit-scrollbar { display: none; }
     .mode-tabs .mode-tab {
+      position: relative; z-index: 1;   /* above the sliding .mode-indicator */
       appearance: none; -webkit-appearance: none;
       border: 0; background: transparent; cursor: pointer;
       font: inherit; font-size: 13px; font-weight: 600; line-height: 1.3;
       color: var(--muted); padding: 7px 14px; border-radius: 999px;
       white-space: nowrap; transition: background-color .15s, color .15s, box-shadow .15s;
     }
-    .mode-tabs .mode-tab:hover { background: var(--surface); color: var(--ink); }
-    .mode-tabs .mode-tab[aria-selected='true'] {
-      background: var(--surface); color: var(--accent);
+    .mode-tabs .mode-tab:hover { color: var(--ink); }
+    .mode-tabs .mode-tab[aria-selected='true'] { color: var(--accent); }
+    /* The white "chip" behind the selected tab is ONE element that slides
+       (transform + width) from tab to tab; search-page.js positions it. */
+    .mode-indicator {
+      position: absolute; top: 4px; bottom: 4px; left: 0; width: 0;
+      background: var(--surface); border-radius: 999px;
       box-shadow: 0 1px 2px rgba(31, 46, 37, .18);
+      pointer-events: none;
+    }
+    .mode-indicator.ready { transition: transform .28s cubic-bezier(.4, 0, .2, 1), width .28s cubic-bezier(.4, 0, .2, 1); }
+    .mode-tag {
+      font-size: 9px; font-weight: 700; letter-spacing: .4px; text-transform: uppercase;
+      color: var(--gap); margin-left: 3px; vertical-align: super; line-height: 0;
+    }
+    /* One line under the tabs saying what the selected mode searches. */
+    .mode-hint {
+      flex: 0 0 auto; margin: 7px 0 12px; min-height: 1.4em;
+      text-align: center; font-size: 13px; font-style: italic; color: var(--muted);
+    }
+    /* :key="mode" re-creates the span on every switch, which replays this. */
+    .hint-text { display: inline-block; animation: hint-in .22s ease both; }
+    @keyframes hint-in { from { opacity: 0; transform: translateY(-3px); } to { opacity: 1; transform: none; } }
+    @media (prefers-reduced-motion: reduce) {
+      .mode-indicator.ready { transition: none; }
+      .hint-text { animation: none; }
     }
     .mode-tabs .mode-tab:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
     .searchbar {
@@ -274,6 +298,16 @@
       display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden;
     }
     .preview:empty { display: none; }
+    /* Matched query words (word modes). A soft ochre wash, no padding, so
+       the line does not shift when marks appear. */
+    mark.hl {
+      background: color-mix(in srgb, var(--dataset) 24%, #fff);
+      color: inherit; border-radius: 2px;
+      box-shadow: 0 0 0 1px color-mix(in srgb, var(--dataset) 24%, #fff);
+    }
+    /* Where the match is, when the visible text does not show it. */
+    .matched-in { font-size: 12.5px; font-style: italic; color: var(--muted); margin: -4px 0 10px; overflow-wrap: anywhere; }
+    .matched-in mark.hl { font-style: normal; }
     /* Indication / Gap cards have no headline: the body text sits where the
        title would be, with the badge to its right (and still right-aligned
        when "Show more" hides the preview). */

@@ -242,3 +242,89 @@ export function clampInt(value, fallback) {
   const v = Number(value);
   return Number.isFinite(v) && v >= 1 ? Math.round(v) : fallback;
 }
+
+// ---- Match highlighting ----------------------------------------------------
+// Neo4j full-text search does not say WHERE it matched, but every search
+// index uses the `standard-no-stop-words` analyzer: lowercase + split on word
+// boundaries, no stemming, no accent folding. So the browser reproduces the
+// match exactly: a query word is a hit wherever the same whole word appears
+// (any case) in one of the fields the mode's index covers. Only the word
+// modes are highlighted; Natural language can match by meaning alone.
+
+// A word as Lucene's standard tokenizer sees it (an apostrophe between
+// letters stays inside the word: "dell'acqua").
+const WORD = /[\p{L}\p{N}]+(?:['’][\p{L}\p{N}]+)*/gu;
+
+export function queryTerms(query) {
+  const words = String(query || '').toLowerCase().match(WORD) || [];
+  return [...new Set(words)];
+}
+
+// Text -> [{t, hit}] segments; hit = whole word equal to a term (any case).
+export function markParts(text, terms) {
+  const str = String(text == null ? '' : text);
+  if (!terms || !terms.length || !str) return [{ t: str, hit: false }];
+  const set = new Set(terms);
+  const parts = [];
+  let last = 0;
+  for (const m of str.matchAll(WORD)) {
+    if (!set.has(m[0].toLowerCase())) continue;
+    if (m.index > last) parts.push({ t: str.slice(last, m.index), hit: false });
+    parts.push({ t: m[0], hit: true });
+    last = m.index + m[0].length;
+  }
+  if (last < str.length) parts.push({ t: str.slice(last), hit: false });
+  return parts;
+}
+
+// Index of the first hit in `text`, -1 when none.
+export function firstHit(text, terms) {
+  if (!text || !terms || !terms.length) return -1;
+  const set = new Set(terms);
+  for (const m of String(text).matchAll(WORD)) {
+    if (set.has(m[0].toLowerCase())) return m.index;
+  }
+  return -1;
+}
+
+// The fields each word mode's index covers (search_indexes.FULLTEXT_INDEXES),
+// as payload accessors, in the order a card would rather show them.
+const OI = 'Oggetto Informativo';
+const MATCH_FIELDS = {
+  title: [
+    { label: 'Title',         get: r => r.officialTitle },
+    { label: 'Italian title', get: r => r.type === OI ? r.title : '' },
+    { label: 'Subtitle',      get: r => r.subtitle },
+  ],
+  keywords: [
+    { label: 'Title',       get: r => r.type === OI || r.type === 'Progetto' ? r.officialTitle : '' },
+    { label: 'Subtitle',    get: r => r.subtitle },
+    { label: 'Abstract',    get: r => r.type === OI ? r.abstract : '' },
+    { label: 'Findings',    get: r => r.findings },
+    { label: 'Indication',  get: r => r.content },
+    { label: 'Motivation',  get: r => r.motivation },
+    { label: 'Gap',         get: r => r.type === 'Lacuna' ? r.description : '' },
+    { label: 'Description', get: r => r.type === 'Progetto' ? r.description : '' },
+  ],
+};
+
+// First field of the mode with a hit: {label, text, index}, or null.
+export function findMatch(r, terms, mode) {
+  for (const f of MATCH_FIELDS[mode] || []) {
+    const text = f.get(r);
+    const index = firstHit(text, terms);
+    if (index >= 0) return { label: f.label, text: String(text), index };
+  }
+  return null;
+}
+
+// ~2*radius characters of `text` around position `index`, cut on spaces,
+// with an ellipsis on each side that was cut.
+export function snippetAround(text, index, radius = 90) {
+  const str = String(text);
+  let start = Math.max(0, index - radius);
+  let end = Math.min(str.length, index + radius);
+  if (start > 0) { const sp = str.indexOf(' ', start); if (sp >= 0 && sp < index) start = sp + 1; }
+  if (end < str.length) { const sp = str.lastIndexOf(' ', end); if (sp > index) end = sp; }
+  return (start > 0 ? '…' : '') + str.slice(start, end).trim() + (end < str.length ? '…' : '');
+}
