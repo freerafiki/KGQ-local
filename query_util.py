@@ -238,8 +238,13 @@ WITH row, n,
      [ (parent:Contribution)-[rp:recommends|highlights_gap]->(n) | parent ][0] AS oiParent
 WITH row, n, mainPurposeNames, oiParent,
      [ (oiParent)-[rpm:has_main_function]->(p:Purpose) | p.name ] AS parentMainPurposeNames,
-     [ (ca:ContributionActor)-[rc:contributed_to]->(n) | {name: ca.name, type: ca.type} ]
-     + [ (ca2:ContributionActor)-[rc2:project_contributor]->(n) | {name: ca2.name, type: ca2.type} ] AS actorEntries
+     // Contributors: Author (person) and Institution nodes; the legacy
+     // ContributionActor (with its own `type`) is still read for old graphs.
+     [ (ca)-[:author_contrib|institution_contrib|contributed_to|project_contributor]->(n)
+       WHERE ca:Author OR ca:Institution OR ca:ContributionActor
+       | {name: ca.name,
+          type: CASE WHEN ca:Institution THEN 'institution'
+                     WHEN ca:Author THEN 'person' ELSE ca.type END} ] AS actorEntries
 WITH row, n, mainPurposeNames, parentMainPurposeNames, oiParent, actorEntries,
      [ (n)-[:describes]->(p:Phenomenon) | p.name ] AS phenomenonNames,
      [ (n)-[:has_as_main_topic]->(t:Topic) | t.name ] AS topicNames,
@@ -386,7 +391,9 @@ ORDER BY score DESC, result.id ASC
 
 def _authors_fragment(labels):
     """Author source: BM25 over `authors_fulltext`, resolved to the Contribution
-    each actor contributed to.
+    each actor contributed to. Actors are Author (people) and Institution
+    nodes; ContributionActor/contributed_to is the legacy schema, still
+    matched so older graphs keep working (search_indexes.py holds the index).
 
     `labels` applies the same Doc Type filter as the other sources, so in
     `author` mode the result set empties out when Contribution is filtered out.
@@ -400,7 +407,7 @@ def _authors_fragment(labels):
 CALL db.index.fulltext.queryNodes('authors_fulltext', query, {{limit: $sourceK}})
 YIELD node AS actor, score
 WITH actor, score
-MATCH (actor)-[ra:contributed_to]->(oi:Contribution)
+MATCH (actor)-[ra:author_contrib|institution_contrib|contributed_to]->(oi:Contribution)
 WITH oi, max(score) AS score{where}
 ORDER BY score DESC, oi.id ASC
 """ + _ranked_tail('oi', 'authors', lexical=True)
@@ -1202,6 +1209,15 @@ def _fetch_related(element_id):
     return ordered
 
 
+# Contributors of one node, same rule as the search payload's actorEntries.
+_ACTORS_QUERY = (
+    "MATCH (ca)-[:author_contrib|institution_contrib|contributed_to|project_contributor]->(n) "
+    "WHERE elementId(n) = $eid AND (ca:Author OR ca:Institution OR ca:ContributionActor) "
+    "RETURN ca.name AS name, "
+    "CASE WHEN ca:Institution THEN 'institution' WHEN ca:Author THEN 'person' "
+    "ELSE ca.type END AS atype")
+
+
 def _unique_actors(rows):
     """Drop duplicated ContributionActor rows.
 
@@ -1276,8 +1292,7 @@ def get_node_detail(element_id):
 
     if "Contribution" in labels:
         arows, _, _ = driver.execute_query(
-            "MATCH (ca:ContributionActor)-[:contributed_to]->(n) "
-            "WHERE elementId(n) = $eid RETURN ca.name AS name, ca.type AS atype",
+            _ACTORS_QUERY,
             eid=element_id, database_=NEO4J_GRAPH, routing_=RoutingControl.READ)
         entry["actors"] = _unique_actors(
             [{"name": r["name"], "type": r["atype"]} for r in arows])
@@ -1299,8 +1314,7 @@ def get_node_detail(element_id):
         # Projects link to actors via project_contributor (not contributed_to)
         # and have no Contribution parent / child Rec/Gap edges.
         arows, _, _ = driver.execute_query(
-            "MATCH (ca:ContributionActor)-[:project_contributor]->(n) "
-            "WHERE elementId(n) = $eid RETURN ca.name AS name, ca.type AS atype",
+            _ACTORS_QUERY,
             eid=element_id, database_=NEO4J_GRAPH, routing_=RoutingControl.READ)
         entry["actors"] = _unique_actors(
             [{"name": r["name"], "type": r["atype"]} for r in arows])

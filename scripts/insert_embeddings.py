@@ -11,6 +11,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from query_config import embedding_dims, encode_document
+from search_indexes import ensure_fulltext_indexes
 from embedding_text import (
     contribution_description_text,
     contribution_title_text,
@@ -68,12 +69,10 @@ if DROP_INDICES:
     records, summary, keys = driver.execute_query("""
     DROP INDEX project_embeddings IF EXISTS;
     """, database_=NEO4J_GRAPH, routing_=RoutingControl.WRITE)
-    records, summary, keys = driver.execute_query("""
-    DROP INDEX search_fulltext IF EXISTS;
-    """, database_=NEO4J_GRAPH, routing_=RoutingControl.WRITE)
-    records, summary, keys = driver.execute_query("""
-    DROP INDEX authors_fulltext IF EXISTS;
-    """, database_=NEO4J_GRAPH, routing_=RoutingControl.WRITE)
+    # The full-text indexes are NOT dropped here: they do not depend on the
+    # embeddings, and dropping them meant an interrupted run (they were only
+    # recreated at the very end) left the API without `search_fulltext`.
+    # ensure_fulltext_indexes() at the end rebuilds them if outdated.
 
     print("DONE")
     print("***")
@@ -443,34 +442,10 @@ driver.execute_query("""
 #   
 # ONE FULL-TEXT for all nodes together     
 print("=" * 70)    
-print("Creating index for full text")                                
-records, summary, keys = driver.execute_query("""
-    CREATE FULLTEXT INDEX search_fulltext IF NOT EXISTS
-    FOR (n:Contribution|Recommendation|Gap|Project)
-    ON EACH [n.officialTitle, n.subtitle, n.description, n.findings, n.content, n.motivation, n.name]
-""", database_=NEO4J_GRAPH, routing_=RoutingControl.WRITE)
-
-print("Creating index for authors")
-records, summary, keys = driver.execute_query("""
-    CREATE FULLTEXT INDEX authors_fulltext IF NOT EXISTS
-    FOR (a:ContributionActor)
-    ON EACH [a.name]
-    OPTIONS { indexConfig: {
-        `fulltext.analyzer`: 'standard-no-stop-words',
-        `fulltext.eventually_consistent`: false
-    } }
-""", database_=NEO4J_GRAPH, routing_=RoutingControl.WRITE)
-
-
-####
-records, summary, keys = driver.execute_query("""
-CREATE FULLTEXT INDEX title_fulltext IF NOT EXISTS
-FOR (n:Contribution|Recommendation|Gap|Project)
-ON EACH [n.title, n.officialTitle, n.name, n.subtitle];
-""", database_=NEO4J_GRAPH, routing_=RoutingControl.WRITE)
-###
-
-print(f'Created index for {len(records)} ({summary.counters.properties_set} properties set)')
+# Definitions shared with scripts/create_search_indexes.py (no model needed
+# there): creates missing ones and rebuilds any with an outdated definition.
+print("Creating / checking the full-text indexes")
+ensure_fulltext_indexes(driver, NEO4J_GRAPH)
 
 #############################################################
 # CHUNK VERSION ?

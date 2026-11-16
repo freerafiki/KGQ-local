@@ -51,6 +51,26 @@ interrupted `insert_embeddings.py`. So either run
 `python3 scripts/insert_embeddings.py` once — it is fast when only gaps/indexes are
 missing (it skips `done` nodes and uses `IF NOT EXISTS` for indexes).
 
+## Graph rebuilt via `KGB/graph_io.py import`
+
+`graph_io.py` snapshots carry only range/text/point indexes: the
+**full-text** indexes the API queries by name (`search_fulltext`,
+`title_fulltext`, `authors_fulltext`) are owned by this repo and are NOT in
+the snapshot. After every import, recreate them (no embedding model needed,
+safe to re-run):
+
+```bash
+python3 scripts/create_search_indexes.py --dry-run   # what is missing/outdated
+python3 scripts/create_search_indexes.py
+sudo systemctl restart kgq                           # clean startup index check
+```
+
+Definitions live in `search_indexes.py`. An index with an outdated definition
+(e.g. `authors_fulltext` still on the legacy `ContributionActor` label) is
+dropped and rebuilt, which `IF NOT EXISTS` alone would not do.
+`insert_embeddings.py` calls the same code at its end and no longer drops the
+full-text indexes at its start.
+
 ## Embeddings only via export / import
 
 Use this when the graph is rebuilt or re-ingested on the target by other
