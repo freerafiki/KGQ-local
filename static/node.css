@@ -102,6 +102,20 @@ a.badge:hover { background: color-mix(in srgb, var(--bc) 20%, #fff); }
   margin: 0 0 10px; font-size: 12px; font-weight: 600;
   color: var(--muted); text-transform: uppercase; letter-spacing: .7px;
 }
+/* Section title with an action on the right (Details -> "Link ↗"). */
+.section-head { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; margin-bottom: 10px; }
+.section-head h2 { margin: 0; }
+.head-link {
+  display: inline-flex; align-items: center; gap: 4px;
+  font-size: 13px; font-weight: 600; color: var(--accent); text-decoration: none;
+  padding: 2px 8px; border-radius: 999px; transition: background-color .15s;
+}
+a.head-link:hover { background: var(--accent-tint); text-decoration: underline; }
+.head-link .ext-ic {
+  width: 13px; height: 13px; fill: none; stroke: currentColor; stroke-width: 2;
+  stroke-linecap: round; stroke-linejoin: round;
+}
+.head-link.disabled { color: var(--faint); cursor: not-allowed; }
 table.props { width: 100%; border-collapse: collapse; font-size: 14.5px; line-height: 1.55; color: var(--ink-2); }
 table.props td { padding: 6px 8px; vertical-align: top; border-top: 1px solid var(--card-border); }
 table.props td.k {
@@ -159,6 +173,8 @@ table.props td.v .actor-list { margin: 0; }
 .url-item { font-size: 14px; padding: 3px 0; overflow-wrap: anywhere; }
 .url-item a { color: var(--accent); text-decoration: none; }
 .url-item a:hover { text-decoration: underline; }
+/* "Link: missing" on the node page (no usable link in the URL text). */
+.missing { color: var(--faint); }
 .rel-list { list-style: none; margin: 0; padding: 0; }
 .rel-item { font-size: 14px; padding: 5px 0; border-top: 1px solid var(--card-border); }
 .rel-list .rel-item:first-child { border-top: none; padding-top: 0; }
