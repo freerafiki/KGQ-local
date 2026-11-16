@@ -234,10 +234,10 @@ LET limitedRows = orderedRows[..finalK]
 UNWIND limitedRows AS row
 WITH row, row.result AS n
 WITH row, n,
-     [(n)-[rm:has_main_function]->(p:Purpose) | p.name] AS mainPurposeNames,
+     [(n)-[rm:has_main_function|main_func]->(p:Purpose) | p.name] AS mainPurposeNames,
      [ (parent:Contribution)-[rp:recommends|highlights_gap]->(n) | parent ][0] AS oiParent
 WITH row, n, mainPurposeNames, oiParent,
-     [ (oiParent)-[rpm:has_main_function]->(p:Purpose) | p.name ] AS parentMainPurposeNames,
+     [ (oiParent)-[rpm:has_main_function|main_func]->(p:Purpose) | p.name ] AS parentMainPurposeNames,
      // Contributors: Author (person) and Institution nodes; the legacy
      // ContributionActor (with its own `type`) is still read for old graphs.
      [ (ca)-[:author_contrib|institution_contrib|contributed_to|project_contributor]->(n)
@@ -246,12 +246,12 @@ WITH row, n, mainPurposeNames, oiParent,
           type: CASE WHEN ca:Institution THEN 'institution'
                      WHEN ca:Author THEN 'person' ELSE ca.type END} ] AS actorEntries
 WITH row, n, mainPurposeNames, parentMainPurposeNames, oiParent, actorEntries,
-     [ (n)-[:describes]->(p:Phenomenon) | p.name ] AS phenomenonNames,
-     [ (n)-[:has_as_main_topic]->(t:Topic) | t.name ] AS topicNames,
-     [ (n)-[:refers_to_geographic_area]->(g:GeographicArea) | g.name ] AS geoAreaNames,
-     [ (oiParent)-[:describes]->(p:Phenomenon) | p.name ] AS parentPhenomenonNames,
-     [ (oiParent)-[:has_as_main_topic]->(t:Topic) | t.name ] AS parentTopicNames,
-     [ (oiParent)-[:refers_to_geographic_area]->(g:GeographicArea) | g.name ] AS parentGeoAreaNames
+     [ (n)-[:describes|description]->(p:Phenomenon) | p.name ] AS phenomenonNames,
+     [ (n)-[:has_as_main_topic|main_topic]->(t:Topic) | t.name ] AS topicNames,
+     [ (n)-[:refers_to_geographic_area|geo_area]->(g:GeographicArea) | g.name ] AS geoAreaNames,
+     [ (oiParent)-[:describes|description]->(p:Phenomenon) | p.name ] AS parentPhenomenonNames,
+     [ (oiParent)-[:has_as_main_topic|main_topic]->(t:Topic) | t.name ] AS parentTopicNames,
+     [ (oiParent)-[:refers_to_geographic_area|geo_area]->(g:GeographicArea) | g.name ] AS parentGeoAreaNames
 RETURN
     n AS n,
     n.title AS title,
@@ -1053,7 +1053,7 @@ def _fetch_purposes(eids):
         return {}
     driver = get_driver()
     rows, _, _ = driver.execute_query(
-        "MATCH (x)-[:has_main_function|has_secondary_function]->(p:Purpose) "
+        "MATCH (x)-[:has_main_function|main_func|has_secondary_function|sec_func]->(p:Purpose) "
         "WHERE elementId(x) IN $eids "
         "RETURN elementId(x) AS eid, collect(DISTINCT p.name) AS names",
         eids=eids, database_=NEO4J_GRAPH, routing_=RoutingControl.READ)
@@ -1069,8 +1069,8 @@ def _fetch_purpose_split(element_id):
     driver = get_driver()
     rows, _, _ = driver.execute_query(
         "MATCH (n) WHERE elementId(n) = $eid "
-        "OPTIONAL MATCH (n)-[:has_main_function]->(mp:Purpose) "
-        "OPTIONAL MATCH (n)-[:has_secondary_function]->(sp:Purpose) "
+        "OPTIONAL MATCH (n)-[:has_main_function|main_func]->(mp:Purpose) "
+        "OPTIONAL MATCH (n)-[:has_secondary_function|sec_func]->(sp:Purpose) "
         "RETURN collect(DISTINCT mp.name) AS main, collect(DISTINCT sp.name) AS sec",
         eid=element_id, database_=NEO4J_GRAPH, routing_=RoutingControl.READ)
     if not rows:

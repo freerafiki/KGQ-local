@@ -166,6 +166,9 @@
     .filter-group summary::after { content: "\25B6"; font-size: 10px; transition: transform .2s; }
     .filter-group[open] summary::after { transform: rotate(90deg); }
     .group-body { padding: 2px 0 12px; }
+    /* Internal-only groups (Advanced parameters): greyed out. */
+    .filter-group.internal summary { color: var(--faint); font-weight: 500; }
+    .filter-group.internal .group-body { opacity: .7; }
     .adv-body label { display: flex; flex-direction: column; font-size: 13px; color: var(--muted); margin-bottom: 8px; }
     .adv-body input { margin-top: 4px; width: 110px; padding: 6px; border: 1px solid var(--border); border-radius: 6px; font: inherit; font-size: 14px; color: var(--ink); background: var(--surface); }
     .actor-input { width: 100%; padding: 7px 10px; border: 1px solid var(--border); border-radius: 6px; font: inherit; font-size: 14px; color: var(--ink); background: var(--surface); }
