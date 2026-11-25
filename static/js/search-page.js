@@ -2,7 +2,8 @@
 //
 // The root component's template is the inline markup in index.html (the full
 // Vue build compiles it at mount); this module only wires the state, the API
-// call, the mode tabs and the two child components (cards, contributor facets).
+// call, the three-layer mode switcher (strategy / field / hint) and the two
+// child components (cards, contributor facets).
 
 import {
   createApp, computed, onMounted, onBeforeUnmount, nextTick, reactive, ref, toRefs, watch,
@@ -12,7 +13,9 @@ import {
   saveState, restoreState, pruneFacets,
   FORMAL_ENTRIES, PROJECT_ENTRIES, INCLUDE_ENTRIES, PURPOSE_ENTRIES,
   TAXONOMY_GROUPS,
-  MODE_ENTRIES, DEFAULT_MODE, isMode, modeLabel, yearDomain, filterCounts,
+  STRATEGY_ENTRIES, FIELD_ENTRIES,
+  DEFAULT_MODE, isMode, setMode, strategyOf, modeLabel, hintForMode,
+  yearDomain, filterCounts,
 } from './state.js';
 import { fetchSearch } from './api.js';
 import { ftBounds, clampInt, queryTerms } from './dom.js';
@@ -92,11 +95,14 @@ function applyUrlFilters(url) {
 }
 
 // Keep the address bar shareable: only non-default values are written, and
-// replaceState avoids piling one history entry per search.
+// replaceState avoids piling one history entry per search. Called only
+// after a successful search, and it writes what the RESULTS on screen came
+// from (submittedMode) — a selection made while the request was in flight
+// must not leak into the URL.
 function syncUrl() {
   const params = new URLSearchParams();
   if (store.submittedQuery) params.set('q', store.submittedQuery);
-  if (store.mode !== DEFAULT_MODE) params.set('mode', store.mode);
+  if (store.submittedMode !== DEFAULT_MODE) params.set('mode', store.submittedMode);
   // Filter selections that differ from the all-ticked default ride along, so
   // a copied URL reopens the same view. (They are rewritten on each search —
   // toggling a box alone does not touch the URL yet.)
@@ -137,8 +143,9 @@ const SearchPage = {
     // Template ref on the search bar, for the empty-query focus.
     const qInput = ref(null);
 
-    // Switching a tab fires a new search while the previous one may still be
-    // in flight; the slower (older) response must not overwrite the newer one.
+    // Two searches can overlap (a deep link while a restore is pending, or
+    // Search pressed twice quickly); the slower (older) response must not
+    // overwrite the newer one.
     let lastRequestId = 0;
 
     const ft = computed(() => ftBounds(visibleResults.value));
@@ -177,47 +184,58 @@ const SearchPage = {
     const searchTime = computed(() => (store.timings.search_time_s || 0).toFixed(3));
     const rerankTime = computed(() => (store.timings.rerank_time_s || 0).toFixed(3));
 
-    // "searched:" / "searched in Title:" — the mode comes from the server
-    // echo, so the summary states what actually ran.
+    // "searched:" / "searched in Word-Matching Search (authors):" — the
+    // mode comes from the server echo, so the summary states what actually
+    // ran (a selection made since then is NOT what the results show).
     const searchPrefix = computed(() =>
       store.submittedMode !== DEFAULT_MODE
         ? 'searched in ' + modeLabel(store.submittedMode) + ':'
         : 'searched:');
 
     // Words to highlight in the cards: only for results of a word mode
-    // (Natural language can match by meaning, with no shared word).
+    // (the semantic strategy can match by meaning, with no shared word).
     const HIGHLIGHT_MODES = ['title', 'keywords', 'author'];
     const hlTerms = computed(() =>
       HIGHLIGHT_MODES.includes(store.submittedMode) ? queryTerms(store.submittedQuery) : []);
 
-    // The line under the tabs describing the selected mode.
-    const modeHint = computed(() => {
-      const entry = MODE_ENTRIES.find(m => m.value === store.mode);
-      return entry ? entry.hint : '';
-    });
+    // The line under the switcher describing the effective selection
+    // (layer 3): the selected field's own text under word matching, the
+    // semantic strategy's otherwise.
+    const modeHint = computed(() => hintForMode(store.mode));
 
-    // Sliding highlight behind the selected tab: one absolutely positioned
-    // pill whose left/width follow the selected button, so switching tabs
-    // animates the rounded overlay (CSS transition on left/width). `ready`
-    // turns the transition on only after the first placement, so the pill
-    // does not fly in from the left edge when the page loads.
-    const tabsEl = ref(null);
-    const indicator = reactive({ left: 0, width: 0, ready: false });
-    function placeIndicator() {
-      const el = tabsEl.value;
+    // The active layer-1 strategy, derived from the effective mode — so a
+    // deep link / restore (?mode=nl) opens on the right strategy too.
+    const strategy = computed(() => strategyOf(store.mode));
+
+    // Sliding highlight behind the selected button: one absolutely
+    // positioned pill PER ROW whose left/width follow that row's selected
+    // button, so switching animates the rounded overlay (CSS transition on
+    // left/width). `ready` turns the transition on only after the first
+    // placement, so a pill does not fly in from the left edge when the page
+    // loads. The field row mounts/unmounts with the strategy, so placing it
+    // is a no-op while hidden (its ref is null).
+    const strategyTabsEl = ref(null);
+    const fieldTabsEl = ref(null);
+    const strategyIndicator = reactive({ left: 0, width: 0, ready: false });
+    const fieldIndicator = reactive({ left: 0, width: 0, ready: false });
+    function placeOne(el, indicator) {
       const btn = el && el.querySelector('[aria-selected="true"]');
       if (!btn) return;
       indicator.left = btn.offsetLeft;
       indicator.width = btn.offsetWidth;
       if (!indicator.ready) requestAnimationFrame(() => { indicator.ready = true; });
     }
-    watch(() => store.mode, () => nextTick(placeIndicator));
+    function placeIndicators() {
+      placeOne(strategyTabsEl.value, strategyIndicator);
+      placeOne(fieldTabsEl.value, fieldIndicator);
+    }
+    watch(() => store.mode, () => nextTick(placeIndicators));
     // Web fonts / window width change the button sizes.
-    window.addEventListener('resize', placeIndicator);
-    onBeforeUnmount(() => window.removeEventListener('resize', placeIndicator));
+    window.addEventListener('resize', placeIndicators);
+    onBeforeUnmount(() => window.removeEventListener('resize', placeIndicators));
 
-    // `queryArg` is passed when re-running a query that is already on screen
-    // (tab switch, deep link); otherwise the search bar is the query.
+    // `queryArg` is passed when the query is already known (deep link);
+    // otherwise the search bar is the query.
     async function search(queryArg) {
       const query = (typeof queryArg === 'string' ? queryArg : store.query).trim();
       if (!query) { if (qInput.value) qInput.value.focus(); return; }
@@ -256,30 +274,46 @@ const SearchPage = {
       }
     }
 
-    // Tab click. The results on screen were made by the previous mode, so the
-    // shown query is re-run right away — the selected tab and the displayed
-    // results never disagree. With nothing searched yet it just selects.
-    function selectMode(value) {
-      if (store.mode === value) return;
-      store.mode = value;
-      syncUrl();
-      if (store.submittedQuery) search(store.submittedQuery);
+    // Layer-1 click: pick the strategy. Selecting only changes the
+    // selection — the query on screen keeps its own mode until Search is
+    // pressed again (deliberately NO auto re-run and NO URL write: the
+    // address bar follows a successful search, so it always matches the
+    // results). Picking word matching restores the remembered field.
+    function selectStrategy(id) {
+      const entry = STRATEGY_ENTRIES.find(s => s.id === id);
+      if (!entry || strategy.value === id) return;
+      setMode(entry.mode || store.wordField);
     }
 
-    // ARIA tabs pattern: arrows/Home/End move the selection (roving tabindex).
-    function onTabKeydown(e) {
-      const values = MODE_ENTRIES.map(m => m.value);
-      const current = values.indexOf(store.mode);
+    // Layer-2 click: pick the field word matching searches. setMode also
+    // remembers it as the layer-2 choice for the flip back from semantic.
+    function selectField(value) {
+      if (store.mode === value) return;
+      setMode(value);
+    }
+
+    // ARIA tabs pattern PER ROW: arrows/Home/End move the selection (roving
+    // tabindex) within the row that has focus. `values` lists that row's
+    // selectable ids, `current` is the row's live selection, `pick` applies
+    // it (the button focus follows the selection).
+    function rowKeydown(e, values, current, pick) {
+      const idx = values.indexOf(current);
       let next = null;
-      if (e.key === 'ArrowRight' || e.key === 'ArrowDown') next = (current + 1) % values.length;
-      else if (e.key === 'ArrowLeft' || e.key === 'ArrowUp') next = (current - 1 + values.length) % values.length;
+      if (e.key === 'ArrowRight' || e.key === 'ArrowDown') next = (idx + 1) % values.length;
+      else if (e.key === 'ArrowLeft' || e.key === 'ArrowUp') next = (idx - 1 + values.length) % values.length;
       else if (e.key === 'Home') next = 0;
       else if (e.key === 'End') next = values.length - 1;
-      if (next === null) return;
+      if (next === null || next === idx) return;
       e.preventDefault();
-      selectMode(values[next]);
+      pick(values[next]);
       const tabs = e.currentTarget.querySelectorAll('[role="tab"]');
       if (tabs[next]) tabs[next].focus();
+    }
+    function onStrategyKeydown(e) {
+      rowKeydown(e, STRATEGY_ENTRIES.map(s => s.id), strategy.value, selectStrategy);
+    }
+    function onFieldKeydown(e) {
+      rowKeydown(e, FIELD_ENTRIES.map(f => f.value), store.mode, selectField);
     }
 
     // Card click: full detail lives on the node page.
@@ -288,19 +322,19 @@ const SearchPage = {
     }
 
     onMounted(() => {
-      nextTick(placeIndicator);
-      if (document.fonts && document.fonts.ready) document.fonts.ready.then(placeIndicator);
+      nextTick(placeIndicators);
+      if (document.fonts && document.fonts.ready) document.fonts.ready.then(placeIndicators);
       const url = readUrlQuery();
       applyUrlFilters(url);            // purpose/docType/include narrow the groups
       if (url.q) {
         // Deep link: run it, skip the session restore (the link is explicit).
-        if (url.mode) store.mode = url.mode;
+        setMode(url.mode || DEFAULT_MODE);
         store.query = url.q;
         search(url.q);
         return;
       }
       restoreState();                 // may restore the mode of the saved results
-      if (url.mode) store.mode = url.mode;   // ...but the URL wins
+      if (url.mode) setMode(url.mode);   // ...but the URL wins
     });
 
     return {
@@ -316,16 +350,18 @@ const SearchPage = {
       // store itself so each box v-models store[group.key][value].
       taxonomyGroups: TAXONOMY_GROUPS,
       taxonomy: store,
-      modeEntries: MODE_ENTRIES,
+      strategyEntries: STRATEGY_ENTRIES,
+      fieldEntries: FIELD_ENTRIES,
+      strategy,
       visible: visibleResults,
       groups: groupedResults,
       strongGroups, farGroups, farCount,
       ft, countText, embedTime, searchTime, rerankTime, searchPrefix,
-      modeHint, tabsEl, indicator, hlTerms,
+      modeHint, strategyTabsEl, fieldTabsEl, strategyIndicator, fieldIndicator, hlTerms,
       // Filter entry counts (whole result set) + the Time slider state.
       counts: filterCounts,
       yearDomain, yearFrom, yearTo, rangeFill, setYearFrom, setYearTo,
-      qInput, search, selectMode, onTabKeydown, openNode,
+      qInput, search, selectStrategy, selectField, onStrategyKeydown, onFieldKeydown, openNode,
     };
   },
 };

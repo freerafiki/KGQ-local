@@ -123,6 +123,22 @@
       .hint-text { animation: none; }
     }
     .mode-tabs .mode-tab:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+    /* Layer 2 (the field row): same pill interaction, but visually lighter —
+       no track of its own, smaller labels — so the hierarchy against the
+       strategy row reads at a glance. It sits directly under layer 1. */
+    .mode-tabs.mode-tabs-field {
+      margin-top: 6px; padding: 3px;
+      background: transparent; border-color: transparent;
+    }
+    .mode-tabs.mode-tabs-field .mode-tab {
+      font-size: 12px; padding: 5px 12px;
+    }
+    .mode-tabs.mode-tabs-field .mode-indicator {
+      top: 3px; bottom: 3px;
+      background: var(--sand);
+      box-shadow: none;
+      border: 1px solid var(--card-border);
+    }
     .searchbar {
       display: flex; align-items: center; gap: 8px;
       background: var(--surface); border: 1px solid var(--border); border-radius: 999px;

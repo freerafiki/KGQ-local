@@ -32,22 +32,39 @@
   <div class="container" id="app" v-cloak>
     <div class="logo"><b>V<span class="small-title">enice</span>C<span class="small-title">limate</span>D<span class="small-title">ata</span>B<span class="small-title">ase</span></b> Search<sup class="tag">prototype</sup></div>
 
-    <!-- Search mode switcher (ARIA tabs, DeepL-style pill row). Selecting a
-         tab re-runs the query already on screen, so the selected tab and the
-         shown results never disagree. Roving tabindex: arrows move selection. -->
-    <div class="mode-tabs" ref="tabsEl" role="tablist" aria-label="Search mode" @keydown="onTabKeydown">
+    <!-- Search mode switcher: THREE layers (ARIA tabs, DeepL-style pill
+         rows). Layer 1 picks the strategy; layer 2 — only under the
+         word-matching strategy — picks the field the words are matched
+         against; layer 3 explains the effective selection. Selecting a
+         button only changes the selection (Search runs it), and the rows
+         are independent tablists: roving tabindex, arrows move selection
+         within a row. -->
+    <div class="mode-tabs" ref="strategyTabsEl" role="tablist" aria-label="Search strategy" @keydown="onStrategyKeydown">
       <!-- Sliding highlight behind the selected tab (positioned from JS). -->
-      <span class="mode-indicator" :class="{ ready: indicator.ready }" aria-hidden="true"
-            :style="{ transform: 'translateX(' + indicator.left + 'px)', width: indicator.width + 'px' }"></span>
-      <button v-for="m in modeEntries" :key="m.value" type="button" role="tab" class="mode-tab"
-              :id="'tab-' + m.value"
-              :aria-selected="mode === m.value ? 'true' : 'false'"
+      <span class="mode-indicator" :class="{ ready: strategyIndicator.ready }" aria-hidden="true"
+            :style="{ transform: 'translateX(' + strategyIndicator.left + 'px)', width: strategyIndicator.width + 'px' }"></span>
+      <button v-for="s in strategyEntries" :key="s.id" type="button" role="tab" class="mode-tab"
+              :id="s.mode ? 'tab-' + s.mode : 'strategy-' + s.id"
+              :aria-selected="strategy === s.id ? 'true' : 'false'"
               aria-controls="results-panel"
-              :aria-describedby="mode === m.value ? 'mode-hint' : null"
-              :tabindex="mode === m.value ? 0 : -1"
-              @click="selectMode(m.value)">{{ m.label }}<sup v-if="m.tag" class="mode-tag">{{ m.tag }}</sup></button>
+              :aria-describedby="s.mode && strategy === s.id ? 'mode-hint' : null"
+              :tabindex="strategy === s.id ? 0 : -1"
+              @click="selectStrategy(s.id)">{{ s.label }}<sup v-if="s.tag" class="mode-tag">{{ s.tag }}</sup></button>
     </div>
-    <!-- What the selected mode searches; fades when the tab changes. -->
+    <!-- Layer 2: the field word matching searches (hidden for semantic). -->
+    <div class="mode-tabs mode-tabs-field" v-if="strategy === 'word'" ref="fieldTabsEl" role="tablist"
+         aria-label="Search field" @keydown="onFieldKeydown">
+      <span class="mode-indicator" :class="{ ready: fieldIndicator.ready }" aria-hidden="true"
+            :style="{ transform: 'translateX(' + fieldIndicator.left + 'px)', width: fieldIndicator.width + 'px' }"></span>
+      <button v-for="f in fieldEntries" :key="f.value" type="button" role="tab" class="mode-tab"
+              :id="'tab-' + f.value"
+              :aria-selected="mode === f.value ? 'true' : 'false'"
+              aria-controls="results-panel"
+              :aria-describedby="mode === f.value ? 'mode-hint' : null"
+              :tabindex="mode === f.value ? 0 : -1"
+              @click="selectField(f.value)">{{ f.label }}</button>
+    </div>
+    <!-- What the effective selection searches; fades when it changes. -->
     <p class="mode-hint" id="mode-hint" aria-live="polite">
       <span class="hint-text" :key="mode">{{ modeHint }}</span>
     </p>

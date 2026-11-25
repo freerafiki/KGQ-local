@@ -167,38 +167,94 @@ export const FACET_ENTRIES = [
   { key: 'institution', field: 'institutions', title: 'Institutions', emptyMsg: 'No matching institutions.', compare: (a, b) => a.localeCompare(b) },
 ];
 
-// The search modes shown as tabs above the search bar, in display order.
-// `value` is what the API expects (query_util.SEARCH_MODES), `label` is the
-// tab text, `tag` an optional superscript on it, `hint` the line shown under
-// the tabs while the mode is selected. What each mode searches
-// (query_util._build_cypher):
+// The search mode switcher above the search bar is THREE layers: layer 1
+// picks the strategy, layer 2 — shown only under the word-matching
+// strategy — picks the field the words are matched against, layer 3 is the
+// hint line explaining the effective selection. The layers map onto the
+// ONE API mode the request still carries (query_util.SEARCH_MODES):
+//   word + titles     -> title      word + authors  -> author
+//   word + inner text -> keywords   semantic        -> nl
+// What each mode searches (query_util._build_cypher):
 //   title     BM25 word match on title_fulltext: Italian title (A1),
 //             official title (C2), subtitle, project name
 //   author    BM25 on authors_fulltext (Author / Institution names)
-//   nl        hybrid: the keywords index + authors + every vector index
-//             (embedding similarity), fused; reranked when enabled
 //   keywords  BM25 word match on search_fulltext: official title, subtitle,
 //             abstract, findings, indication text/motivation, gap text,
 //             project description (not the Italian A1 title)
+//   nl        hybrid: the keywords index + authors + every vector index
+//             (embedding similarity), fused; reranked when enabled
 export const DEFAULT_MODE = 'title';
-export const MODE_ENTRIES = [
-  { value: 'title',    label: 'Title',
-    hint: 'Search based on matching words in the titles' },
-  { value: 'author',   label: 'Authors',
-    hint: 'Search based only on authors' },
-  { value: 'nl',       label: 'Natural language', tag: 'exp',
+
+// Layer 1: the strategies in display order. `id` is the strategy word,
+// `label` the button text, `tag` an optional superscript on it. A strategy
+// with its own `mode` needs no layer 2 (semantic); the word-matching one
+// resolves through FIELD_ENTRIES below, so it carries no `mode` and no
+// `hint` — its layer-3 line belongs to the selected field.
+export const STRATEGY_ENTRIES = [
+  { id: 'word',     label: 'Word-Matching Search' },
+  { id: 'semantic', label: 'Semantic Similarity Search', tag: 'exp', mode: 'nl',
     hint: 'Experimental: search based on semantic similarity (meaning, not exact words)' },
-  { value: 'keywords', label: 'Keywords',
-    hint: 'Keyword-based search in titles, abstracts, findings, indications and gaps' },
+];
+
+// Layer 2: the fields word matching searches, in display order. `value` is
+// the API mode, `label` the button text, `short` the word used in the
+// results summary, `hint` the layer-3 line while this field is selected.
+export const FIELD_ENTRIES = [
+  { value: 'title',    label: 'Search on titles',    short: 'titles',
+    hint: 'Search based on matching words in the titles' },
+  { value: 'author',   label: 'Search on authors',   short: 'authors',
+    hint: 'Search based only on authors' },
+  { value: 'keywords', label: 'Search on inner text', short: 'inner text',
+    hint: 'Keyword-based search in the inner text: abstract, findings, recommendations, indications and gaps' },
+];
+
+// Every API mode a selection can end on: the field modes plus the modes of
+// the strategies that carry their own (semantic -> nl).
+const MODE_VALUES = [
+  ...FIELD_ENTRIES.map(f => f.value),
+  ...STRATEGY_ENTRIES.filter(s => s.mode).map(s => s.mode),
 ];
 
 export function isMode(value) {
-  return MODE_ENTRIES.some(m => m.value === value);
+  return MODE_VALUES.includes(value);
 }
 
+// Which layer-1 strategy an API mode belongs to: a strategy's own mode
+// picks that strategy, every field mode is word matching.
+export function strategyOf(value) {
+  const strategy = STRATEGY_ENTRIES.find(s => s.mode === value);
+  return strategy ? strategy.id : 'word';
+}
+
+// What the results summary calls the mode that ran, e.g.
+// "Word-Matching Search (authors)" / "Semantic Similarity Search".
 export function modeLabel(value) {
-  const entry = MODE_ENTRIES.find(m => m.value === value);
-  return entry ? entry.label : value;
+  const field = FIELD_ENTRIES.find(f => f.value === value);
+  if (field) {
+    const word = STRATEGY_ENTRIES.find(s => s.id === 'word');
+    return (word ? word.label : 'Word-Matching') + ' (' + field.short + ')';
+  }
+  const strategy = STRATEGY_ENTRIES.find(s => s.mode === value);
+  return strategy ? strategy.label : value;
+}
+
+// Layer 3: the hint line for the effective selection — the selected
+// field's own text under word matching, the strategy's otherwise.
+export function hintForMode(value) {
+  const field = FIELD_ENTRIES.find(f => f.value === value);
+  if (field) return field.hint;
+  const strategy = STRATEGY_ENTRIES.find(s => s.mode === value);
+  return strategy ? strategy.hint : '';
+}
+
+// The one door into store.mode: picking a FIELD mode also remembers it as
+// the layer-2 choice (deep links, session restore, tab clicks), so the
+// semantic strategy can be selected and left again without losing it.
+// Unknown values are ignored — old/broken links stay on the default.
+export function setMode(value) {
+  if (!isMode(value)) return;
+  store.mode = value;
+  if (FIELD_ENTRIES.some(f => f.value === value)) store.wordField = value;
 }
 
 // ---- State -----------------------------------------------------------------
@@ -207,7 +263,10 @@ export const store = reactive({
   // Request / response
   query: '',            // live content of the search bar
   submittedQuery: '',   // the query the current results answer to
-  mode: DEFAULT_MODE,           // selected tab: mode of the NEXT request
+  mode: DEFAULT_MODE,           // effective API mode of the NEXT request
+  // Layer-2 choice of the word-matching strategy (see FIELD_ENTRIES): kept
+  // while the semantic strategy is selected, so flipping back restores it.
+  wordField: DEFAULT_MODE,
   submittedMode: DEFAULT_MODE,  // mode the current results came from (server echo)
   phase: 'idle',        // idle -> loading -> done | error
   error: '',
@@ -490,7 +549,7 @@ export function restoreState() {
   if (!saved || typeof saved.query !== 'string' || !saved.query ||
       !Array.isArray(saved.results) || !saved.results.length) return false;
   store.query = saved.query;
-  if (isMode(saved.mode)) store.mode = saved.mode;
+  setMode(saved.mode);          // also seeds wordField when it is a field
   store.submittedMode = store.mode;
   if (Number.isFinite(saved.source_k)) store.source_k = saved.source_k;
   if (Number.isFinite(saved.final_k)) store.final_k = saved.final_k;
