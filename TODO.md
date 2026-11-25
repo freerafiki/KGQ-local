@@ -18,8 +18,7 @@ that is `/usr/bin/python3`, not the miniconda `python3`. 1.4.2 requires
 sentence-transformers 6.
 
 Smoke test: `python3 -c "import colbert_m3; v = colbert_m3.encode_documents(['ciao']); print(v[0].shape)"`
-should print `(n_tokens, 1024)`, and `import query_config` must still load (no
-transformers conflict).
+should print `(n_tokens, 1024)`, and `import query_config` must still load (no transformers conflict).
 
 ### 2. Re-embed the dense vectors without prompts (build machine)
 
