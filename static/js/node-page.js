@@ -11,7 +11,7 @@
 //   entities            -> node.html?eid=...              (their node page)
 
 import { createApp, computed, onMounted, ref } from '../vendor/vue.esm-browser.prod.js';
-import { BADGE_CLASS, BADGE_SHORT, formalBadge, truncate, PURPOSE_CLASS } from './dom.js';
+import { BADGE_CLASS, BADGE_SHORT, formalBadge, truncate, PURPOSE_CLASS, displayTitle } from './dom.js';
 // The type taxonomy (value <-> graph type pairing, and which filter group
 // owns the entry) is the search page's filter data; importing it keeps the
 // facet links from drifting out of sync.
@@ -78,6 +78,7 @@ const PROP_LABELS = {
   // Related-node fields (they arrive in `related`, not in `properties`)
   URL: 'URL',
   url: 'URL',
+  URL: 'Reference / URL (as entered)',
   physicalArchive: 'Physical archive',
   email: 'Email',
   institution: 'Institution',
@@ -104,6 +105,42 @@ const authorHref = name => 'index.html?mode=author&q=' + encodeURIComponent(name
 const purposeHref = label => 'index.html?purpose=' + encodeURIComponent(label);
 const docTypeHref = word => 'index.html?docType=' + encodeURIComponent(word);
 const includeHref = word => 'index.html?include=' + encodeURIComponent(word);
+
+// The `URL` property is free text: a link, "DOI: 10.xxxx/...; Journal ...",
+// a full citation, or nothing. Pull every usable link out of it, in order:
+// http(s) URLs, then bare DOIs (-> https://doi.org/...) not already inside
+// one of those URLs, then "www." hosts. Plain citation text yields [].
+const URL_RE = /https?:\/\/[^\s<>"'»]+/gi;
+const DOI_RE = /\b10\.\d{4,9}\/[^\s<>"'»;,]+/g;
+const WWW_RE = /(^|[\s(])(www\.[^\s<>"'»;,]+)/gi;
+
+// Drop sentence punctuation glued to the end of a link, and a closing
+// bracket that has no opening one inside it (DOIs may contain "(02)").
+function trimLink(s) {
+  let out = s.replace(/[.,;:'"»\]]+$/, '');
+  while (out.endsWith(')') && (out.split('(').length < out.split(')').length)) {
+    out = out.slice(0, -1).replace(/[.,;:]+$/, '');
+  }
+  return out;
+}
+
+export function extractLinks(text) {
+  const str = String(text == null ? '' : text);
+  const links = [];
+  const seen = new Set();
+  const add = href => {
+    const key = href.toLowerCase().replace(/\/+$/, '');
+    if (!seen.has(key)) { seen.add(key); links.push({ main: href, href }); }
+  };
+  const urls = (str.match(URL_RE) || []).map(trimLink);
+  urls.forEach(add);
+  for (const m of str.match(DOI_RE) || []) {
+    const doi = trimLink(m);
+    if (!urls.some(u => u.toLowerCase().includes(doi.toLowerCase()))) add('https://doi.org/' + doi);
+  }
+  for (const m of str.matchAll(WWW_RE)) add('https://' + trimLink(m[2]));
+  return links;
+}
 
 // Only http(s) links are clickable; anything else renders as plain text.
 function safeHref(url) {
@@ -177,7 +214,7 @@ function briefCard(brief) {
     href: nodeHref(brief.eid),
     badgeClass: word ? word.toLowerCase() : (BADGE_CLASS[brief.type] || 'ft'),
     badgeText: word || (BADGE_SHORT[brief.type] || 'FT'),
-    title: brief.title || brief.content || brief.description || 'Node',
+    title: displayTitle(brief.title || brief.content || brief.description || 'Node'),
     snippet: truncate(brief.title || brief.content || brief.description || 'No text', 180),
     rel: brief.rel || '',
     purposes: (brief.purposes || []).join(', '),
@@ -208,8 +245,9 @@ const NodePage = {
       if (!d) return null;
       const props = d.properties || {};
       const related = d.related || {};
-      const name = props.officialTitle || props.title || props.content || props.name
-        || props.description || 'Unnamed node';
+      // Header only: the Details table below keeps the stored spelling.
+      const name = displayTitle(props.officialTitle || props.title || props.content || props.name
+        || props.description || 'Unnamed node');
       const ftBucket = related.formalType;
       const ftRaw = d.formalType
         || (ftBucket && ftBucket.items && ftBucket.items[0] ? ftBucket.items[0].label : '')
@@ -227,6 +265,21 @@ const NodePage = {
     // A3a abstract, A3b findings, grant, validity period, C3 URL/DOI, A4 main
     // purpose, secondary purpose, contributors split into people /
     // institutions - and only then everything else.
+    // Shortcut in the Details header: the record's first link (same source
+    // as the "Link" row), or a disabled placeholder when it has none.
+    // Documents and projects only; null hides it (Indication / Gap pages).
+    const headLink = computed(() => {
+      const d = data.value;
+      if (!d) return null;
+      const labels = d.labels || [];
+      if (!labels.includes('Contribution') && !labels.includes('Project')) return null;
+      const props = d.properties || {};
+      const links = extractLinks(props.URL || props.url);
+      return links.length
+        ? { href: links[0].href, title: 'Open ' + links[0].href }
+        : { href: '', title: 'No link available for this record' };
+    });
+
     const detailsRows = computed(() => {
       const d = data.value;
       if (!d) return [];
@@ -246,10 +299,23 @@ const NodePage = {
         ['grant',         'Grant'],
         ['validityPeriod','Validity period'],
       ];
+      // Documents and projects get a "Link" row right after the findings:
+      // the links found in the free-text URL property (see extractLinks),
+      // or "missing". The raw text itself stays under Additional Properties.
+      const hasLinkRow = isDoc || (d.labels || []).includes('Project');
+      const links = hasLinkRow ? extractLinks(props.URL || props.url) : [];
       overviewFields.forEach(([k, label]) => {
         const v = props[k];
-        if (v == null || (typeof v === 'string' && !v.trim())) return;
-        rows.push({ label, kind: 'text', value: plainValue(v) });
+        if (!(v == null || (typeof v === 'string' && !v.trim()))) {
+          rows.push({ label, kind: 'text', value: plainValue(v) });
+        }
+        if (k === 'findings' && hasLinkRow) {
+          rows.push(links.length
+            ? { label: 'Link', kind: 'urls',
+                items: links.map(l => ({ main: l.main, href: l.href, external: true, extra: '' })),
+                more: [] }
+            : { label: 'Link', kind: 'missing' });
+        }
       });
 
       // C3 URL/DOI: relationship-linked Reference nodes (not a property).
@@ -404,7 +470,7 @@ const NodePage = {
 
     return {
       phase, error, data,
-      header, detailsRows, extraRows, relatedSections, linkSections, assisted,
+      header, headLink, detailsRows, extraRows, relatedSections, linkSections, assisted,
       goBack,
     };
   },

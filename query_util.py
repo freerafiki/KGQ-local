@@ -234,23 +234,29 @@ LET limitedRows = orderedRows[..finalK]
 UNWIND limitedRows AS row
 WITH row, row.result AS n
 WITH row, n,
-     [(n)-[rm:has_main_function]->(p:Purpose) | p.name] AS mainPurposeNames,
+     [(n)-[rm:has_main_function|main_func]->(p:Purpose) | p.name] AS mainPurposeNames,
      [ (parent:Contribution)-[rp:recommends|highlights_gap]->(n) | parent ][0] AS oiParent
 WITH row, n, mainPurposeNames, oiParent,
-     [ (oiParent)-[rpm:has_main_function]->(p:Purpose) | p.name ] AS parentMainPurposeNames,
-     [ (ca:ContributionActor)-[rc:contributed_to]->(n) | {name: ca.name, type: ca.type} ]
-     + [ (ca2:ContributionActor)-[rc2:project_contributor]->(n) | {name: ca2.name, type: ca2.type} ] AS actorEntries
+     [ (oiParent)-[rpm:has_main_function|main_func]->(p:Purpose) | p.name ] AS parentMainPurposeNames,
+     // Contributors: Author (person) and Institution nodes; the legacy
+     // ContributionActor (with its own `type`) is still read for old graphs.
+     [ (ca)-[:author_contrib|institution_contrib|contributed_to|project_contributor]->(n)
+       WHERE ca:Author OR ca:Institution OR ca:ContributionActor
+       | {name: ca.name,
+          type: CASE WHEN ca:Institution THEN 'institution'
+                     WHEN ca:Author THEN 'person' ELSE ca.type END} ] AS actorEntries
 WITH row, n, mainPurposeNames, parentMainPurposeNames, oiParent, actorEntries,
-     [ (n)-[:describes]->(p:Phenomenon) | p.name ] AS phenomenonNames,
-     [ (n)-[:has_as_main_topic]->(t:Topic) | t.name ] AS topicNames,
-     [ (n)-[:refers_to_geographic_area]->(g:GeographicArea) | g.name ] AS geoAreaNames,
-     [ (oiParent)-[:describes]->(p:Phenomenon) | p.name ] AS parentPhenomenonNames,
-     [ (oiParent)-[:has_as_main_topic]->(t:Topic) | t.name ] AS parentTopicNames,
-     [ (oiParent)-[:refers_to_geographic_area]->(g:GeographicArea) | g.name ] AS parentGeoAreaNames
+     [ (n)-[:describes|description]->(p:Phenomenon) | p.name ] AS phenomenonNames,
+     [ (n)-[:has_as_main_topic|main_topic]->(t:Topic) | t.name ] AS topicNames,
+     [ (n)-[:refers_to_geographic_area|geo_area]->(g:GeographicArea) | g.name ] AS geoAreaNames,
+     [ (oiParent)-[:describes|description]->(p:Phenomenon) | p.name ] AS parentPhenomenonNames,
+     [ (oiParent)-[:has_as_main_topic|main_topic]->(t:Topic) | t.name ] AS parentTopicNames,
+     [ (oiParent)-[:refers_to_geographic_area|geo_area]->(g:GeographicArea) | g.name ] AS parentGeoAreaNames
 RETURN
     n AS n,
     n.title AS title,
     n.officialTitle AS officialTitle,
+    n.subtitle AS subtitle,
     n.name AS name,
     n.id_num AS id_num,
     n.description AS abstract,
@@ -261,6 +267,8 @@ RETURN
     n.description AS description,
     n.releaseYear AS releaseYear,
     oiParent.releaseYear AS parentReleaseYear,
+    n.DOI_year AS doiYear,
+    oiParent.DOI_year AS parentDoiYear,
     row.sources AS sources,
     row.sourceRanks AS sourceRanks,
     row.rawScores AS rawScores,
@@ -271,7 +279,7 @@ RETURN
     oiParent.id AS parentId,
     labels(oiParent) AS parentLabels,
     elementId(oiParent) AS parentNeo4jId,
-    head([(oiParent)-[:has_formal_type]->(pft:FormalType) | properties(pft)]) AS parentFormalTypeProps,
+    head([(oiParent)-[:has_formal_type|formal_type]->(pft:FormalType) | properties(pft)]) AS parentFormalTypeProps,
     parentMainPurposeNames AS parentMainPurposeNames,
     actorEntries AS actorEntries,
     phenomenonNames AS phenomenonNames,
@@ -280,7 +288,15 @@ RETURN
     parentPhenomenonNames AS parentPhenomenonNames,
     parentTopicNames AS parentTopicNames,
     parentGeoAreaNames AS parentGeoAreaNames,
-    head([(n)-[:has_formal_type]->(ft:FormalType) | properties(ft)]) AS formalTypeProps,
+    head([(n)-[:has_formal_type|formal_type]->(ft:FormalType) | properties(ft)]) AS formalTypeProps,
+    // Card info line (documents only): first author with fallbacks, DOI
+    // document type and journal. Authors live on (Author)-[:author_contrib
+    // {role}]->, not on ContributionActor.
+    n.first_author AS firstAuthorDoi,
+    head([(a:Author)-[ra:author_contrib]->(n) WHERE ra.role = 'main' | a.name]) AS mainAuthor,
+    head([(a2:Author)-[:author_contrib]->(n) | a2.name]) AS anyAuthor,
+    n.DOI_doc_type AS doiDocType,
+    head([(n)-[:published]->(j:Journal) | j.name]) AS journal,
     row.wrrf AS wrrf,
     row.strongWrrf AS strongWrrf,
     row.passed AS passed,
@@ -376,7 +392,9 @@ ORDER BY score DESC, result.id ASC
 
 def _authors_fragment(labels):
     """Author source: BM25 over `authors_fulltext`, resolved to the Contribution
-    each actor contributed to.
+    each actor contributed to. Actors are Author (people) and Institution
+    nodes; ContributionActor/contributed_to is the legacy schema, still
+    matched so older graphs keep working (search_indexes.py holds the index).
 
     `labels` applies the same Doc Type filter as the other sources, so in
     `author` mode the result set empties out when Contribution is filtered out.
@@ -390,7 +408,7 @@ def _authors_fragment(labels):
 CALL db.index.fulltext.queryNodes('authors_fulltext', query, {{limit: $sourceK}})
 YIELD node AS actor, score
 WITH actor, score
-MATCH (actor)-[ra:contributed_to]->(oi:Contribution)
+MATCH (actor)-[ra:author_contrib|institution_contrib|contributed_to]->(oi:Contribution)
 WITH oi, max(score) AS score{where}
 ORDER BY score DESC, oi.id ASC
 """ + _ranked_tail('oi', 'authors', lexical=True)
@@ -606,6 +624,14 @@ def _split_actors(entries):
     return actors, people, institutions
 
 
+def _year_of(release_year, doi_year):
+    """A 4-digit release year as a string, else the DOI year, else None."""
+    raw = str(release_year).strip() if release_year is not None else ''
+    if len(raw) == 4 and raw.isdigit():
+        return raw
+    return str(doi_year) if doi_year else None
+
+
 def _serialize(record):
     """Turn a raw Neo4j record (w/ Node) into a plain JSON-able dict."""
     sources = record['sources']
@@ -655,18 +681,32 @@ def _serialize(record):
         # Release year of the Contribution (the card shows it). Rec/Gap nodes
         # carry no year of their own, so they take the source document's;
         # Projects have neither -> None, and the card simply shows no year.
-        "releaseYear": record['releaseYear'] or record['parentReleaseYear'],
+        # releaseYear is often a placeholder ("Applicabile", "Non
+        # applicabile") rather than a year: then the DOI year is used, else
+        # None (the card shows "Year: -").
+        "releaseYear": (_year_of(record['releaseYear'], record['doiYear'])
+                        or _year_of(record['parentReleaseYear'],
+                                    record['parentDoiYear'])),
     }
     entry["doc_key"] = _doc_key(labels, record)
     if entry["type"] == "Oggetto Informativo":
         entry.update({
             "abstract": record['abstract'],
             "findings": record['findings'],
+            # Indexed by search_fulltext / title_fulltext: sent so the card
+            # can show (and highlight) a match that is only in the subtitle.
+            "subtitle": record['subtitle'],
             "submission_id": record['id'],
             # Raw FormalType text; drives the short Paper/Model/Plan/Norm/
             # Dataset badge on the result card (falls back to "Document"
             # when absent).
             "formalType": _formal_type_text(record['formalTypeProps']),
+            # Card info line: DOI first_author, else the 'main' Author, else
+            # any Author. docType stays raw (the frontend prettifies it).
+            "firstAuthor": (record['firstAuthorDoi'] or record['mainAuthor']
+                            or record['anyAuthor']),
+            "docType": record['doiDocType'],
+            "journal": record['journal'],
         })
     elif entry["type"] == "Raccomandazione":
         entry.update({"content": record['content'], "motivation": record['motivation']})
@@ -1013,7 +1053,7 @@ def _fetch_purposes(eids):
         return {}
     driver = get_driver()
     rows, _, _ = driver.execute_query(
-        "MATCH (x)-[:has_main_function|has_secondary_function]->(p:Purpose) "
+        "MATCH (x)-[:has_main_function|main_func|has_secondary_function|sec_func]->(p:Purpose) "
         "WHERE elementId(x) IN $eids "
         "RETURN elementId(x) AS eid, collect(DISTINCT p.name) AS names",
         eids=eids, database_=NEO4J_GRAPH, routing_=RoutingControl.READ)
@@ -1029,8 +1069,8 @@ def _fetch_purpose_split(element_id):
     driver = get_driver()
     rows, _, _ = driver.execute_query(
         "MATCH (n) WHERE elementId(n) = $eid "
-        "OPTIONAL MATCH (n)-[:has_main_function]->(mp:Purpose) "
-        "OPTIONAL MATCH (n)-[:has_secondary_function]->(sp:Purpose) "
+        "OPTIONAL MATCH (n)-[:has_main_function|main_func]->(mp:Purpose) "
+        "OPTIONAL MATCH (n)-[:has_secondary_function|sec_func]->(sp:Purpose) "
         "RETURN collect(DISTINCT mp.name) AS main, collect(DISTINCT sp.name) AS sec",
         eid=element_id, database_=NEO4J_GRAPH, routing_=RoutingControl.READ)
     if not rows:
@@ -1173,6 +1213,15 @@ def _fetch_related(element_id):
     return ordered
 
 
+# Contributors of one node, same rule as the search payload's actorEntries.
+_ACTORS_QUERY = (
+    "MATCH (ca)-[:author_contrib|institution_contrib|contributed_to|project_contributor]->(n) "
+    "WHERE elementId(n) = $eid AND (ca:Author OR ca:Institution OR ca:ContributionActor) "
+    "RETURN ca.name AS name, "
+    "CASE WHEN ca:Institution THEN 'institution' WHEN ca:Author THEN 'person' "
+    "ELSE ca.type END AS atype")
+
+
 def _unique_actors(rows):
     """Drop duplicated ContributionActor rows.
 
@@ -1247,8 +1296,7 @@ def get_node_detail(element_id):
 
     if "Contribution" in labels:
         arows, _, _ = driver.execute_query(
-            "MATCH (ca:ContributionActor)-[:contributed_to]->(n) "
-            "WHERE elementId(n) = $eid RETURN ca.name AS name, ca.type AS atype",
+            _ACTORS_QUERY,
             eid=element_id, database_=NEO4J_GRAPH, routing_=RoutingControl.READ)
         entry["actors"] = _unique_actors(
             [{"name": r["name"], "type": r["atype"]} for r in arows])
@@ -1270,8 +1318,7 @@ def get_node_detail(element_id):
         # Projects link to actors via project_contributor (not contributed_to)
         # and have no Contribution parent / child Rec/Gap edges.
         arows, _, _ = driver.execute_query(
-            "MATCH (ca:ContributionActor)-[:project_contributor]->(n) "
-            "WHERE elementId(n) = $eid RETURN ca.name AS name, ca.type AS atype",
+            _ACTORS_QUERY,
             eid=element_id, database_=NEO4J_GRAPH, routing_=RoutingControl.READ)
         entry["actors"] = _unique_actors(
             [{"name": r["name"], "type": r["atype"]} for r in arows])
@@ -1281,7 +1328,7 @@ def get_node_detail(element_id):
             "WHERE elementId(n) = $eid "
             "RETURN type(r) AS rel, elementId(parent) AS peid, "
             "labels(parent) AS plabels, properties(parent) AS pprops, "
-            "head([(parent)-[:has_formal_type]->(ft:FormalType) | properties(ft)]) AS ftprops",
+            "head([(parent)-[:has_formal_type|formal_type]->(ft:FormalType) | properties(ft)]) AS ftprops",
             eid=element_id, database_=NEO4J_GRAPH, routing_=RoutingControl.READ)
         eids = [r["peid"] for r in prows]
         purposes = _fetch_purposes(eids)

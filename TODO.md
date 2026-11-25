@@ -120,3 +120,18 @@ Paste the suggested value into `RERANKER_MODELS["ettin-32m"]["threshold"]`
 
 - [ ] laptop: `RERANKER = ...` (and `RERANKER_KIND`) in `reranker_models.py` / `query_config.py`
 - [ ] server: same, likely a larger size, or bge-m3 if Italian quality wins
+
+## Result card info line + child cards (check in the browser)
+
+`query_util.py` now returns `firstAuthor` (DOI `first_author` → Author with
+role `main` → any Author), `docType` (raw `DOI_doc_type`) and `journal`
+(`published` → Journal) for documents. The Cypher expressions were checked
+read-only against the DB (373/398 docs get an author, 127 a doc type, 118 a
+journal), but the full search needs the embedding model. On the machine
+that serves search:
+
+1. Restart uvicorn, run `scripts/run_frontend.sh`, search e.g. "monitoring".
+2. Document cards: info line reads `First author | Year | Type | Journal`
+   (parts missing when absent).
+3. Indication/Gap cards (nested and standalone): no headline, no info line,
+   body text with the Ind/Gap badge on its right; "Show more" still works.

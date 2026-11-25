@@ -219,7 +219,7 @@ def chooseSourceWeights(query: str):
 # process. Only registry names are accepted: a request can never make the
 # server download an arbitrary model.
 USE_RERANKER = True
-RERANKER_KIND = "cross-encoder"
+RERANKER_KIND = "colbert"
 RERANKER_KINDS = ("cross-encoder", "colbert")
 
 # The cross-encoder registry (RERANKER_MODELS: model id, score activation,
@@ -235,7 +235,7 @@ RERANK_MAX_LENGTH = 512    # tokens of (query + document) seen by the model
 # (single vague words like "climate" score low on a cross-encoder and would
 # all be pushed to "far"); author mode matches NAMES, nothing to judge.
 # An explicit rerank=True request still reranks title mode (evaluation).
-RERANK_MODES = ("nl", "keywords", "title") # remove "title" ?
+RERANK_MODES = ("nl") #, "keywords") #, "title") # remove "title" ?
 
 
 def reranker_specs():

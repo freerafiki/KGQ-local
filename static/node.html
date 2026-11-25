@@ -19,6 +19,7 @@
     <symbol id="ic-gap" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10" /> <path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3" /> <path d="M12 17h.01" /></symbol>
     <symbol id="ic-prj" viewBox="0 0 24 24"><path d="M16 20V4a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16" /> <rect width="20" height="14" x="2" y="6" rx="2" /></symbol>
     <symbol id="ic-oi" viewBox="0 0 24 24"><path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z" /> <path d="M14 2v4a2 2 0 0 0 2 2h4" /></symbol>
+    <symbol id="ic-ext" viewBox="0 0 24 24"><path d="M15 3h6v6" /> <path d="M10 14 21 3" /> <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6" /></symbol>
     <symbol id="ic-ft" viewBox="0 0 24 24"><path d="m21 21-4.34-4.34" /> <circle cx="11" cy="11" r="8" /></symbol>
   </svg>
 
@@ -56,7 +57,15 @@
            URL/DOI, purposes and contributors. Purpose chips link to the
            Purpose facet, contributor names to an Authors-mode search. -->
       <div v-if="detailsRows.length" class="section">
-        <h2>Details</h2>
+        <!-- Header with the record's link on the right (greyed out and
+             disabled when the data has none). -->
+        <div class="section-head">
+          <h2>Details</h2>
+          <a v-if="headLink && headLink.href" class="head-link" :href="headLink.href"
+             target="_blank" rel="noopener" :title="headLink.title">Link<svg class="ext-ic" aria-hidden="true"><use href="#ic-ext"></use></svg></a>
+          <span v-else-if="headLink" class="head-link disabled" role="link" aria-disabled="true"
+                :title="headLink.title">Link<svg class="ext-ic" aria-hidden="true"><use href="#ic-ext"></use></svg></span>
+        </div>
         <table class="props">
           <tr v-for="row in detailsRows" :key="row.label">
             <td class="k">{{ row.label }}</td>
@@ -70,6 +79,7 @@
                   <a v-if="a.href" :href="a.href">{{ a.name }}</a><template v-else>{{ a.name }}</template>
                 </li>
               </ul>
+              <em v-else-if="row.kind === 'missing'" class="missing">missing</em>
               <template v-else-if="row.kind === 'urls'">
                 <url-item v-for="(u, i) in row.items" :key="i" :item="u"></url-item>
                 <details v-if="row.more.length" class="more">
