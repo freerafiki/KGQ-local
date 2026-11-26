@@ -28,10 +28,13 @@ export default {
       state.selected = state.selected.filter(s => s !== name);
     }
 
-    return { entry, state, visibleNames, remove };
+    // Highlights the section while it narrows anything (picks or a typed query).
+    const active = computed(() => state.selected.length > 0 || !!state.query.trim());
+
+    return { entry, state, visibleNames, remove, active };
   },
   template: `
-<details class="filter-group">
+<details class="filter-group" :class="{ active }">
   <summary>{{ entry.title }}</summary>
   <div class="group-body">
     <input type="text" class="actor-input" placeholder="Type to filter…" autocomplete="off" v-model="state.query">

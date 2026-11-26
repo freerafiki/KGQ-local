@@ -5,7 +5,7 @@
 // Nothing here touches the DOM: this module is the page's model only.
 
 import { reactive, computed } from '../vendor/vue.esm-browser.prod.js';
-import { formalBadge, FORMAL_TYPES, clampInt } from './dom.js';
+import { formalBadge, clampInt } from './dom.js';
 
 // ---- Filter taxonomy -------------------------------------------------------
 
@@ -118,17 +118,15 @@ export const TAXONOMY_GROUPS = [
   },
 ];
 
-const PURPOSE_VALUES = PURPOSE_ENTRIES.map(e => e.value);
-
 // One checkbox entry per value; all boxes of a group share its dot colour.
 for (const group of TAXONOMY_GROUPS) {
   group.entries = group.values.map(value => ({ value, dot: group.dot }));
 }
 
-// Every box of a list starts ticked (the "unchecking hides what carries it"
-// behaviour the checkbox filters are built on).
-function tickAll(values) {
-  return Object.fromEntries(values.map(v => [v, true]));
+// Every entry starts unselected: nothing selected = no narrowing, selecting
+// entries narrows the results to ONLY those (see passesOnly).
+function untickAll(values) {
+  return Object.fromEntries(values.map(v => [v, false]));
 }
 
 // Name order for the Authors facet. Author names are canonical
@@ -183,7 +181,7 @@ export const FACET_ENTRIES = [
 //             project description (not the Italian A1 title)
 //   nl        hybrid: the keywords index + authors + every vector index
 //             (embedding similarity), fused; reranked when enabled
-export const DEFAULT_MODE = 'title';
+export const DEFAULT_MODE = 'keywords';   // word matching on complete metadata
 
 // Layer 1: the strategies in display order. `id` is the strategy word,
 // `label` the button text, `tag` an optional superscript on it. A strategy
@@ -200,12 +198,12 @@ export const STRATEGY_ENTRIES = [
 // the API mode, `label` the button text, `short` the word used in the
 // results summary, `hint` the layer-3 line while this field is selected.
 export const FIELD_ENTRIES = [
-  { value: 'title',    label: 'Search on titles',    short: 'titles',
-    hint: 'Search based on matching words in the titles' },
-  { value: 'author',   label: 'Search on authors',   short: 'authors',
-    hint: 'Search based only on authors' },
-  { value: 'keywords', label: 'Search on inner text', short: 'inner text',
+  { value: 'keywords', label: 'On complete metadata', short: 'complete metadata',
     hint: 'Keyword-based search in the inner text: abstract, findings, recommendations, indications and gaps' },
+  { value: 'title',    label: 'Titles only',  short: 'titles',
+    hint: 'Search based on matching words in the titles' },
+  { value: 'author',   label: 'Authors only', short: 'authors',
+    hint: 'Search based only on authors' },
 ];
 
 // Every API mode a selection can end on: the field modes plus the modes of
@@ -279,14 +277,16 @@ export const store = reactive({
   final_k: 50,
   rrf_constant: 60,
 
-  // Client-side filters — all default to checked, so unchecking one hides
-  // the results carrying that tag.
-  formal:   Object.fromEntries(FORMAL_ENTRIES.map(e => [e.value, true])),
-  types:    Object.fromEntries(TYPE_ENTRIES.map(e => [e.value, true])),
-  purposes: Object.fromEntries(PURPOSE_ENTRIES.map(e => [e.value, true])),
+  // Client-side filters. A flag = entry SELECTED: results are narrowed to
+  // the selected entries (none selected = everything shown). Exception:
+  // the Include also entries (types.Indications/Gap) are ON = shown, and
+  // start off.
+  formal:   Object.fromEntries(FORMAL_ENTRIES.map(e => [e.value, false])),
+  types:    Object.fromEntries(TYPE_ENTRIES.map(e => [e.value, false])),
+  purposes: Object.fromEntries(PURPOSE_ENTRIES.map(e => [e.value, false])),
   // Phenomena / Topic / Geographic area: one checkbox map per taxonomy
   // group, every value ticked (see TAXONOMY_GROUPS).
-  ...Object.fromEntries(TAXONOMY_GROUPS.map(g => [g.key, tickAll(g.values)])),
+  ...Object.fromEntries(TAXONOMY_GROUPS.map(g => [g.key, untickAll(g.values)])),
   facets: {
     person:      { query: '', selected: [] },
     institution: { query: '', selected: [] },
@@ -346,7 +346,7 @@ export const yearDomain = computed(() => {
 
 // ---- Filter entry counts ---------------------------------------------------
 
-// How many results the CURRENT result set holds per entry, for the checkbox
+// How many STRONG results (all, once "show more" is open) the CURRENT result set holds per entry, for the checkbox
 // groups (Doc Type, Include also, Main purpose, Phenomena, Topic, Geographic
 // area). Counted over the WHOLE set — the numbers stay stable while other
 // filters are toggled and only change with a new search (the user-facing
@@ -360,6 +360,10 @@ export const filterCounts = computed(() => {
     counts[g.key] = Object.fromEntries(g.values.map(v => [v, 0]));
   }
   for (const r of store.results) {
+    // Only the strong tier is counted, so the numbers agree with the results
+    // above the "possibly unrelated" toggle — until that toggle is opened,
+    // then the far tier counts too.
+    if (!store.showFar && !isStrong(r)) continue;
     if (r.type === 'Oggetto Informativo') {
       const word = formalBadge(r.formalType);
       if (word && word in formal) formal[word] += 1;
@@ -395,30 +399,81 @@ function facetPasses(key, r) {
   );
 }
 
-// Whitelist semantics per axis: a result survives if it carries at least one
-// active tag. Results with NO tags on an axis (e.g. a Rec/Gap with no purpose)
-// are "untagged" and always pass that axis.
-//
-// `known` = the axis' full checkbox list. Tags outside it (a value that
-// appeared in the graph after this UI shipped, or a malformed one) cannot be
-// ticked or unticked, so they are IGNORED: a result whose tags are all
-// unknown counts as untagged instead of vanishing with every box ticked.
-function passesAxis(tags, active, known) {
-  if (known) tags = tags.filter(t => known.includes(t));
-  if (!tags.length) return true;
-  if (!active.length) return false;
-  return tags.some(t => active.includes(t));
+// "Only" semantics per axis: nothing selected = no narrowing; otherwise a
+// result survives only if it carries at least one SELECTED tag (a result
+// with no tag on that axis therefore drops out while a selection is active).
+function passesOnly(tags, selected) {
+  return !selected.length || tags.some(t => selected.includes(t));
+}
+
+// The values of an entry list whose map flag is on.
+const picked = (map, entries) => entries.filter(e => map[e.value]).map(e => e.value);
+
+// ---- Active filters (the status bar above the results) ---------------------
+// One entry per filter that deviates from the default state (nothing
+// selected, Include also off, full year range, no facet picks):
+// { key, group, text, remove() } (remove undoes just that filter). The list is what the bar renders and counts.
+export const activeFilters = computed(() => {
+  const out = [];
+  const boxes = (group, map, entries, label) => {
+    for (const e of entries) {
+      if (map[e.value]) out.push({ key: group + ':' + e.value, group, text: label(e), remove: () => { map[e.value] = false; } });
+    }
+  };
+  boxes('Doc Type', store.formal, FORMAL_ENTRIES, e => e.value);
+  boxes('Doc Type', store.types, PROJECT_ENTRIES, e => e.label);
+  boxes('Include also', store.types, INCLUDE_ENTRIES, e => e.label);
+  boxes('Main purpose', store.purposes, PURPOSE_ENTRIES, e => e.value);
+  for (const g of TAXONOMY_GROUPS) boxes(g.title, store[g.key], g.entries, e => e.value);
+
+  const dom = yearDomain.value;
+  const from = store.year.from, to = store.year.to;
+  if ((from !== null && from !== dom.min) || (to !== null && to !== dom.max)) {
+    out.push({ key: 'year', group: 'Time', text: (from ?? dom.min) + ' \u2013 ' + (to ?? dom.max),
+      remove: () => { store.year.from = null; store.year.to = null; } });
+  }
+  if (!store.year.showMissing) out.push({ key: 'year-missing', group: 'Time', text: 'hide docs without year',
+    remove: () => { store.year.showMissing = true; } });
+
+  for (const entry of FACET_ENTRIES) {
+    const facet = store.facets[entry.key];
+    for (const name of facet.selected) out.push({ key: entry.key + ':' + name, group: entry.title, text: name,
+      remove: () => { facet.selected = facet.selected.filter(s => s !== name); } });
+    const q = facet.query.trim();
+    if (q) out.push({ key: entry.key + '?', group: entry.title, text: 'contains \u201C' + q + '\u201D',
+      remove: () => { facet.query = ''; } });
+  }
+  return out;
+});
+
+// Back to the default state in one shot: nothing selected, Include also off,
+// full year range, docs without year shown, facet picks and queries emptied.
+export function clearFilters() {
+  const off = map => { for (const k of Object.keys(map)) map[k] = false; };
+  off(store.formal);
+  off(store.types);
+  off(store.purposes);
+  for (const g of TAXONOMY_GROUPS) off(store[g.key]);
+  store.year.from = null;
+  store.year.to = null;
+  store.year.showMissing = true;
+  for (const entry of FACET_ENTRIES) {
+    store.facets[entry.key].selected = [];
+    store.facets[entry.key].query = '';
+  }
 }
 
 // ---- The filter chain ------------------------------------------------------
 // Toggling a filter re-filters the ALREADY-FETCHED results locally, no round
 // trip to the API.
 export const visibleResults = computed(() => {
-  const typeActive    = TYPE_ENTRIES.filter(e => store.types[e.value]).map(e => e.type);
-  const formalActive  = FORMAL_ENTRIES.filter(e => store.formal[e.value]).map(e => e.value);
-  const purposeActive = PURPOSE_ENTRIES.filter(e => store.purposes[e.value]).map(e => e.value);
-  // Phenomena / Topic / Geographic area: the ticked values per group.
-  const taxonomyActive = Object.fromEntries(
+  // Doc Type = the FormalType entries plus Project, one selection set.
+  const docSel = [...picked(store.formal, FORMAL_ENTRIES), ...picked(store.types, PROJECT_ENTRIES)];
+  // Include also: the Rec/Gap node types shown on top (off by default).
+  const includeOn = INCLUDE_ENTRIES.filter(e => store.types[e.value]).map(e => e.type);
+  const purposeSel = picked(store.purposes, PURPOSE_ENTRIES);
+  // Phenomena / Topic / Geographic area: the selected values per group.
+  const taxonomySel = Object.fromEntries(
     TAXONOMY_GROUPS.map(g => [g.key, g.values.filter(v => store[g.key][v])]));
 
   // Time: the bounds default to the full year range of this result set;
@@ -428,25 +483,29 @@ export const visibleResults = computed(() => {
   const yearHi = store.year.to ?? dom.max;
 
   return store.results.filter(r => {
-    // Contributions are filtered through their FormalType badge (the 5 Doc
-    // Type entries); every other node type by its own entry — Project through
-    // the Doc Type group, Rec/Gap through "Include also". A Contribution
-    // without a recognised FormalType only survives while NOTHING is
-    // narrowed.
+    // Contributions are filtered through their FormalType badge (Doc Type
+    // entries), Project through the same group, Rec/Gap only by whether
+    // "Include also" switched them on. A Contribution without a recognised
+    // FormalType only survives while no Doc Type is selected.
     let typeOk;
     if (r.type === 'Oggetto Informativo') {
       const word = formalBadge(r.formalType);
-      typeOk = word ? passesAxis([word], formalActive)
-                    : formalActive.length === FORMAL_TYPES.length;
+      typeOk = word ? passesOnly([word], docSel) : !docSel.length;
+    } else if (r.type === 'Progetto') {
+      typeOk = passesOnly(['Project'], docSel);
     } else {
-      typeOk = passesAxis([r.type], typeActive);
+      // Rec/Gap: switched on by "Include also", and — while a Doc Type is
+      // selected — only when their PARENT document is of a selected type.
+      const parentWord = r.parent_oi ? formalBadge(r.parent_oi.formalType) : '';
+      typeOk = includeOn.includes(r.type) &&
+        (!docSel.length || (!!parentWord && docSel.includes(parentWord)));
     }
     if (!typeOk) return false;
-    if (!passesAxis(r.purposes || [], purposeActive, PURPOSE_VALUES)) return false;
+    if (!passesOnly(r.purposes || [], purposeSel)) return false;
     // The taxonomy facets are three more independent axes (AND across
     // groups, OR inside one), same rule as the purpose filter.
     for (const g of TAXONOMY_GROUPS) {
-      if (!passesAxis(r[g.field] || [], taxonomyActive[g.key], g.values)) return false;
+      if (!passesOnly(r[g.field] || [], taxonomySel[g.key])) return false;
     }
     if (dom.min !== null) {
       const y = yearOf(r);

@@ -9,13 +9,13 @@ import {
   createApp, computed, onMounted, onBeforeUnmount, nextTick, reactive, ref, toRefs, watch,
 } from '../vendor/vue.esm-browser.prod.js';
 import {
-  store, visibleResults, groupedResults, strongGroups, farGroups, farCount,
+  store, visibleResults, groupedResults, strongGroups, farGroups, farCount, isStrong, clearFilters,
   saveState, restoreState, pruneFacets,
   FORMAL_ENTRIES, PROJECT_ENTRIES, INCLUDE_ENTRIES, PURPOSE_ENTRIES,
   TAXONOMY_GROUPS,
   STRATEGY_ENTRIES, FIELD_ENTRIES,
   DEFAULT_MODE, isMode, setMode, strategyOf, modeLabel, hintForMode,
-  yearDomain, filterCounts,
+  yearDomain, filterCounts, activeFilters,
 } from './state.js';
 import { fetchSearch } from './api.js';
 import { ftBounds, clampInt, queryTerms } from './dom.js';
@@ -66,9 +66,9 @@ function readListParam(params, key, known) {
 }
 
 // The purpose/docType/include params REPLACE their own filter group's
-// selection: merely ticking one box among the default all-ticked ones would
-// be a no-op, and a present param with no valid value therefore ticks
-// nothing. Each param only touches its OWN group — an inbound ?docType= link
+// selection (docType/purpose/...: the listed entries become the ONLY ones
+// shown; include: the listed Rec/Gap types are switched on), and a present
+// param with no valid value selects nothing. Each param only touches its OWN group — an inbound ?docType= link
 // must not silently clear "Include also", which that link never carried.
 // People and Institutions are not URL state — their names only exist in the
 // result set, so person links go through ?mode=author&q=... instead.
@@ -103,24 +103,24 @@ function syncUrl() {
   const params = new URLSearchParams();
   if (store.submittedQuery) params.set('q', store.submittedQuery);
   if (store.submittedMode !== DEFAULT_MODE) params.set('mode', store.submittedMode);
-  // Filter selections that differ from the all-ticked default ride along, so
-  // a copied URL reopens the same view. (They are rewritten on each search —
-  // toggling a box alone does not touch the URL yet.)
+  // Selected filter entries ride along (nothing selected = nothing written),
+  // so a copied URL reopens the same view. (They are rewritten on each
+  // search — clicking an entry alone does not touch the URL yet.)
   const purposes = PURPOSE_ENTRIES.filter(e => store.purposes[e.value]).map(e => e.value);
-  if (purposes.length !== PURPOSE_ENTRIES.length) params.set('purpose', purposes.join(','));
+  if (purposes.length) params.set('purpose', purposes.join(','));
   for (const g of TAXONOMY_GROUPS) {
     const picked = g.values.filter(v => store[g.key][v]);
-    if (picked.length !== g.values.length) params.set(g.param, picked.join(','));
+    if (picked.length) params.set(g.param, picked.join(','));
   }
   const docTypes = [
     ...FORMAL_ENTRIES.filter(e => store.formal[e.value]).map(e => e.value),
     ...PROJECT_ENTRIES.filter(e => store.types[e.value]).map(e => e.value),
   ];
-  if (docTypes.length !== FORMAL_ENTRIES.length + PROJECT_ENTRIES.length) {
+  if (docTypes.length) {
     params.set('docType', docTypes.join(','));
   }
   const includes = INCLUDE_ENTRIES.filter(e => store.types[e.value]).map(e => e.value);
-  if (includes.length !== INCLUDE_ENTRIES.length) {
+  if (includes.length) {
     params.set('include', includes.join(','));
   }
   // Time: only a narrowed range is written (?year=2019-2022; one year as
@@ -175,10 +175,15 @@ const SearchPage = {
       store.year.to = Math.max(v, store.year.from ?? yearDomain.value.min);
     }
 
+    // The count matches the cards above the "possibly unrelated" toggle:
+    // strong results only (visible minus the far tier), and "filtered from"
+    // is the strong total of the unfiltered set.
     const countText = computed(() => {
-      const total = store.results.length;
-      const shown = visibleResults.value.length;
-      return shown + ' results' + (total !== shown ? ' (filtered from ' + total + ')' : '');
+      const shown = visibleResults.value.length - farCount.value;
+      const total = store.results.filter(isStrong).length;
+      const far = farCount.value;
+      return shown + ' results' + (total !== shown ? ' (filtered from ' + total + ')' : '') +
+        (far ? ', plus ' + far + ' possibly unrelated' : '');
     });
     const embedTime = computed(() => (store.timings.embedding_time_s || 0).toFixed(3));
     const searchTime = computed(() => (store.timings.search_time_s || 0).toFixed(3));
@@ -337,6 +342,8 @@ const SearchPage = {
       if (url.mode) setMode(url.mode);   // ...but the URL wins
     });
 
+    const activeGroups = computed(() => new Set(activeFilters.value.map(f => f.group)));
+
     return {
       ...toRefs(store),
       formalEntries: FORMAL_ENTRIES,
@@ -359,7 +366,11 @@ const SearchPage = {
       ft, countText, embedTime, searchTime, rerankTime, searchPrefix,
       modeHint, strategyTabsEl, fieldTabsEl, strategyIndicator, fieldIndicator, hlTerms,
       // Filter entry counts (whole result set) + the Time slider state.
-      counts: filterCounts,
+      counts: filterCounts, activeFilters, clearFilters,
+      anyActive: names => names.some(n => activeGroups.value.has(n)),
+      totalCount: computed(() => store.results.length),
+      // Names of the filter sections currently narrowing the results.
+      activeGroups,
       yearDomain, yearFrom, yearTo, rangeFill, setYearFrom, setYearTo,
       qInput, search, selectStrategy, selectField, onStrategyKeydown, onFieldKeydown, openNode,
     };

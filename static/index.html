@@ -30,7 +30,11 @@
        No build step: Vue is vendored in static/vendor/ and imported as an ES
        module, so the page is still served as static files. -->
   <div class="container" id="app" v-cloak>
-    <div class="logo"><b>V<span class="small-title">enice</span>C<span class="small-title">limate</span>D<span class="small-title">ata</span>B<span class="small-title">ase</span></b> Search<sup class="tag">prototype</sup></div>
+    <!-- Top bar: title at the left, room for a logo at the right. -->
+    <header class="topbar">
+      <div class="logo"><b>V<span class="small-title">enice</span>C<span class="small-title">limate</span>D<span class="small-title">ata</span>B<span class="small-title">ase</span></b> <sup class="tag">prototype</sup></div>
+      <img class="logo-img" src="assets/logo_header.gif" alt="CSRCC">
+    </header>
 
     <!-- Search mode switcher: THREE layers (ARIA tabs, DeepL-style pill
          rows). Layer 1 picks the strategy; layer 2 — only under the
@@ -51,6 +55,8 @@
               :tabindex="strategy === s.id ? 0 : -1"
               @click="selectStrategy(s.id)">{{ s.label }}<sup v-if="s.tag" class="mode-tag">{{ s.tag }}</sup></button>
     </div>
+    <!-- Fixed-height slot for layer 2 / layer 3, so nothing moves when the strategy changes. -->
+    <div class="sub-slot">
     <!-- Layer 2: the field word matching searches (hidden for semantic). -->
     <div class="mode-tabs mode-tabs-field" v-if="strategy === 'word'" ref="fieldTabsEl" role="tablist"
          aria-label="Search field" @keydown="onFieldKeydown">
@@ -60,14 +66,14 @@
               :id="'tab-' + f.value"
               :aria-selected="mode === f.value ? 'true' : 'false'"
               aria-controls="results-panel"
-              :aria-describedby="mode === f.value ? 'mode-hint' : null"
               :tabindex="mode === f.value ? 0 : -1"
               @click="selectField(f.value)">{{ f.label }}</button>
     </div>
     <!-- What the effective selection searches; fades when it changes. -->
-    <p class="mode-hint" id="mode-hint" aria-live="polite">
+    <p class="mode-hint" id="mode-hint" aria-live="polite" v-if="strategy === 'semantic'">
       <span class="hint-text" :key="mode">{{ modeHint }}</span>
     </p>
+    </div>
 
     <form @submit.prevent="search()" autocomplete="off">
       <div class="searchbar">
@@ -81,10 +87,10 @@
 
     <div class="layout">
       <aside class="col-filters">
-        <div class="filter-panel">
-          <h3 class="panel-title">Filters</h3>
-
-          <details class="filter-group">
+        <h3 class="panel-title">Refine your search</h3>
+          <details class="filter-panel" :class="{ active: anyActive(['Doc Type', 'Main purpose', 'Time', 'Authors']) }" open>
+            <summary class="panel-summary">Standard Filters</summary>
+          <details class="filter-group" :class="{ active: activeGroups.has('Doc Type') }">
             <summary>Doc Type</summary>
             <div class="group-body">
               <!-- A Contribution is filtered through its FormalType: these 5
@@ -94,23 +100,12 @@
                    node type of its own. The (N) after each label counts the
                    results of THIS search carrying that entry — the whole
                    result set, independent of the other filters. -->
-              <label class="chk" v-for="f in formalEntries" :key="f.value"><input type="checkbox" v-model="formal[f.value]"> <span class="dot" :class="f.dot"></span> {{ f.value }} ({{ counts.formal[f.value] }})</label>
-              <label class="chk" v-for="t in projectEntries" :key="t.value"><input type="checkbox" v-model="types[t.value]"> <span class="dot" :class="t.dot"></span> {{ t.label }} ({{ counts.type[t.value] }})</label>
+              <button type="button" class="opt" v-for="f in formalEntries" :key="f.value" :class="{ sel: formal[f.value] }" :aria-pressed="formal[f.value] ? 'true' : 'false'" @click="formal[f.value] = !formal[f.value]"><span class="dot" :class="f.dot"></span> {{ f.value }} <span class="opt-n">({{ counts.formal[f.value] }})</span></button>
+              <button type="button" class="opt" v-for="t in projectEntries" :key="t.value" :class="{ sel: types[t.value] }" :aria-pressed="types[t.value] ? 'true' : 'false'" @click="types[t.value] = !types[t.value]"><span class="dot" :class="t.dot"></span> {{ t.label }} <span class="opt-n">({{ counts.type[t.value] }})</span></button>
             </div>
           </details>
 
-          <!-- The types that attach TO a document (Indication, Gap): opting
-               in to them is an extra, so they live apart from the document
-               types they hang on. Same `types` axis in the filter chain —
-               only the rendering and the ?include= URL param split. -->
-          <details class="filter-group">
-            <summary>Include also</summary>
-            <div class="group-body">
-              <label class="chk" v-for="t in includeEntries" :key="t.value"><input type="checkbox" v-model="types[t.value]"> <span class="dot" :class="t.dot"></span> {{ t.label }} ({{ counts.type[t.value] }})</label>
-            </div>
-          </details>
-
-          <details class="filter-group">
+          <details class="filter-group" :class="{ active: activeGroups.has('Main purpose') }">
             <summary>Main purpose</summary>
             <div class="group-body">
               <!-- Main-purpose filter: the payload only carries MAIN purposes
@@ -119,7 +114,7 @@
                    stripped where the name starts with it); entries come from
                    PURPOSE_ENTRIES in js/state.js and their values MUST stay the
                    taxonomy labels from query_util.PURPOSE_CATEGORIES. -->
-              <label class="chk" v-for="p in purposeEntries" :key="p.value"><input type="checkbox" v-model="purposes[p.value]"> <span class="dot" :class="p.dot"></span><span class="chk-text">{{ p.value }} ({{ counts.purpose[p.value] }})<span class="chk-desc">{{ p.desc }}</span></span></label>
+              <button type="button" class="opt" v-for="p in purposeEntries" :key="p.value" :class="{ sel: purposes[p.value] }" :aria-pressed="purposes[p.value] ? 'true' : 'false'" @click="purposes[p.value] = !purposes[p.value]"><span class="dot" :class="p.dot"></span><span class="chk-text">{{ p.value }} <span class="opt-n">({{ counts.purpose[p.value] }})</span><span class="chk-desc">{{ p.desc }}</span></span></button>
             </div>
           </details>
 
@@ -128,7 +123,7 @@
                crosses the other. Docs WITHOUT a year are governed by the
                checkbox below the slider. The narrowed range is written to
                ?year= (the node page's Release year link drills into it). -->
-          <details class="filter-group" v-if="yearDomain.min !== null">
+          <details class="filter-group" :class="{ active: activeGroups.has('Time') }" v-if="yearDomain.min !== null">
             <summary>Time</summary>
             <div class="group-body">
               <div class="year-readout">{{ yearFrom }} &#8211; {{ yearTo }}</div>
@@ -147,20 +142,38 @@
           </details>
 
           <actor-facet facet="person"></actor-facet>
-          <actor-facet facet="institution"></actor-facet>
+          </details>
 
+          <details class="filter-panel" :class="{ active: anyActive(taxonomyGroups.map(g => g.title)) }">
+            <summary class="panel-summary">Specific Filters</summary>
           <!-- Phenomena (A5), Topic (B3) and Geographic area (C8a2): the
                other multiple-choice axes of the OI form, rendered from
                TAXONOMY_GROUPS in js/state.js. Same checkbox shape as Main
                purpose — every box ticked, OR inside a group, AND across
                groups — with the entry count of the current result set in
                brackets. -->
-          <details class="filter-group" v-for="g in taxonomyGroups" :key="g.key">
+          <details class="filter-group" :class="{ active: activeGroups.has(g.title) }" v-for="g in taxonomyGroups" :key="g.key">
             <summary>{{ g.title }}</summary>
             <div class="group-body">
-              <label class="chk" v-for="v in g.entries" :key="v.value"><input type="checkbox" v-model="taxonomy[g.key][v.value]"> <span class="dot" :class="v.dot"></span><span class="chk-text">{{ v.value }} ({{ counts[g.key][v.value] }})</span></label>
+              <button type="button" class="opt" v-for="v in g.entries" :key="v.value" :class="{ sel: taxonomy[g.key][v.value] }" :aria-pressed="taxonomy[g.key][v.value] ? 'true' : 'false'" @click="taxonomy[g.key][v.value] = !taxonomy[g.key][v.value]"><span class="dot" :class="v.dot"></span><span class="chk-text">{{ v.value }} <span class="opt-n">({{ counts[g.key][v.value] }})</span></span></button>
             </div>
           </details>
+          </details>
+
+          <details class="filter-panel" :class="{ active: anyActive(['Include also', 'Institutions']) }">
+            <summary class="panel-summary">Experimental / Advanced</summary>
+          <!-- The types that attach TO a document (Indication, Gap): opting
+               in to them is an extra, so they live apart from the document
+               types they hang on. Same `types` axis in the filter chain —
+               only the rendering and the ?include= URL param split. -->
+          <details class="filter-group" :class="{ active: activeGroups.has('Include also') }">
+            <summary>Include also</summary>
+            <div class="group-body">
+              <button type="button" class="opt" v-for="t in includeEntries" :key="t.value" :class="{ sel: types[t.value] }" :aria-pressed="types[t.value] ? 'true' : 'false'" @click="types[t.value] = !types[t.value]"><span class="dot" :class="t.dot"></span> {{ t.label }} <span class="opt-n">({{ counts.type[t.value] }})</span></button>
+            </div>
+          </details>
+
+          <actor-facet facet="institution"></actor-facet>
 
           <!-- Internal tuning (beta testing): greyed out so users read it as
                "not for you" without hiding it from the team. -->
@@ -178,7 +191,7 @@
               </label>
             </div>
           </details>
-        </div>
+          </details>
 
         <!-- Search summary below the Filters card (keeps the results column
              full-width). Shown only after a successful search or restore:
@@ -197,12 +210,22 @@
       </aside>
 
       <section class="col-results">
+        <!-- Status bar: the filters currently narrowing the results. Starts
+             at 0 and follows every filter change; a chip per active filter. -->
+        <div class="filter-feed" role="status" aria-live="polite">
+          <span class="feed-count" :class="{ on: activeFilters.length }"><b>{{ activeFilters.length }}</b> active {{ activeFilters.length === 1 ? 'filter' : 'filters' }}</span>
+          <button type="button" v-for="f in activeFilters" :key="f.key" class="feed-chip" :title="'Remove filter: ' + f.group + ' ' + f.text" @click="f.remove()"><span class="feed-group">{{ f.group }}</span> {{ f.text }} <span class="feed-x" aria-hidden="true">&#215;</span></button>
+          <button type="button" class="feed-clear" v-if="activeFilters.length" @click="clearFilters()">Clear all filters</button>
+        </div>
         <!-- The mode tabs control this panel (labelled by the active tab). -->
         <div class="results" id="results-panel" role="tabpanel" :aria-labelledby="'tab-' + mode">
           <div v-if="phase === 'loading'" class="loading">Searching…</div>
           <div v-else-if="phase === 'error'" class="error">Search failed: {{ error }}</div>
           <template v-else-if="phase === 'done'">
-            <div v-if="!visible.length" class="empty">No results found.</div>
+            <div v-if="!totalCount" class="empty">No results found.</div>
+            <!-- The search DID find results; the filters hide all of them. -->
+            <div v-else-if="!visible.length" class="empty">No results shown<br>
+              {{ totalCount }} {{ totalCount === 1 ? 'result' : 'results' }} found, {{ totalCount }} hidden due to the filters</div>
             <template v-else>
               <!-- A group = a parent document's card plus its Rec/Gap children
                    nested underneath; a result without a visible parent is a

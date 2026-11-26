@@ -69,7 +69,9 @@
       width: 100%; max-width: 1000px; height: 100%;
       margin: 0 auto;
     }
-    .logo { text-align: center; font-family: var(--serif); font-size: 30px; letter-spacing: -.3px; margin: 18px 0 14px; font-weight: 400; color: var(--ink); flex: 0 0 auto; }
+    .topbar { display: flex; justify-content: space-between; align-items: center; gap: 16px; flex: 0 0 auto; margin: 8px 0 6px; }
+    .logo-img { flex: 0 0 auto; height: 44px; width: auto; display: block; }
+    .logo { text-align: left; font-family: var(--serif); font-size: 20px; letter-spacing: -.2px; margin: 0; font-weight: 400; color: var(--ink); flex: 0 0 auto; }
     .logo b { color: var(--accent); font-weight: 600; }
     .logo .tag { font-family: var(--sans); font-size: 11px; font-weight: 600; letter-spacing: .6px; text-transform: uppercase; color: var(--gap); margin-left: 6px; }
     /* Mode switcher: a pill row between the logo and the search bar. The track
@@ -82,8 +84,8 @@
       display: flex; justify-content: center; align-items: center; gap: 4px;
       flex: 0 0 auto;
       position: relative;
-      width: fit-content; max-width: 100%; margin: -4px auto 0;
-      padding: 4px; background: var(--sand); border: 1px solid var(--card-border);
+      width: fit-content; max-width: 100%; margin: 0 auto;
+      padding: 3px; background: var(--sand); border: 1px solid var(--card-border);
       border-radius: 999px; overflow-x: auto; scrollbar-width: none;
     }
     .mode-tabs::-webkit-scrollbar { display: none; }
@@ -91,8 +93,8 @@
       position: relative; z-index: 1;   /* above the sliding .mode-indicator */
       appearance: none; -webkit-appearance: none;
       border: 0; background: transparent; cursor: pointer;
-      font: inherit; font-size: 13px; font-weight: 600; line-height: 1.3;
-      color: var(--muted); padding: 7px 14px; border-radius: 999px;
+      font: inherit; font-size: 14px; font-weight: 600; line-height: 1.25;
+      color: var(--muted); padding: 6px 16px; border-radius: 999px;
       white-space: nowrap; transition: background-color .15s, color .15s, box-shadow .15s;
     }
     .mode-tabs .mode-tab:hover { color: var(--ink); }
@@ -100,7 +102,7 @@
     /* The white "chip" behind the selected tab is ONE element that slides
        (transform + width) from tab to tab; search-page.js positions it. */
     .mode-indicator {
-      position: absolute; top: 4px; bottom: 4px; left: 0; width: 0;
+      position: absolute; top: 3px; bottom: 3px; left: 0; width: 0;
       background: var(--surface); border-radius: 999px;
       box-shadow: 0 1px 2px rgba(31, 46, 37, .18);
       pointer-events: none;
@@ -112,8 +114,8 @@
     }
     /* One line under the tabs saying what the selected mode searches. */
     .mode-hint {
-      flex: 0 0 auto; margin: 7px 0 12px; min-height: 1.4em;
-      text-align: center; font-size: 13px; font-style: italic; color: var(--muted);
+      flex: 0 0 auto; margin: 2px 0 6px; min-height: 1.3em;
+      text-align: center; font-size: 12px; font-style: italic; color: var(--muted);
     }
     /* :key="mode" re-creates the span on every switch, which replays this. */
     .hint-text { display: inline-block; animation: hint-in .22s ease both; }
@@ -127,12 +129,41 @@
        no track of its own, smaller labels — so the hierarchy against the
        strategy row reads at a glance. It sits directly under layer 1. */
     .mode-tabs.mode-tabs-field {
-      margin-top: 6px; padding: 3px;
+      margin: 0; padding: 2px;
       background: transparent; border-color: transparent;
     }
     .mode-tabs.mode-tabs-field .mode-tab {
-      font-size: 12px; padding: 5px 12px;
+      font-size: 11.5px; padding: 3px 10px;
     }
+    /* Layer 2 and the semantic hint share this slot; its height is fixed so
+       the search bar never jumps when the strategy changes. */
+    .sub-slot { flex: 0 0 auto; height: 34px; margin-bottom: 6px; display: flex; align-items: center; justify-content: center; }
+    .sub-slot .mode-hint { margin: 0; min-height: 0; }
+    /* Active-filters bar at the top of the results column. */
+    .filter-feed {
+      position: sticky; top: 0; z-index: 5;
+      display: flex; flex-wrap: wrap; align-items: center; gap: 6px;
+      padding: 6px 0 8px; margin-bottom: 4px; background: var(--bg);
+      border-bottom: 1px solid var(--card-border); font-size: 12px; color: var(--muted);
+    }
+    .feed-count { margin-right: 4px; }
+    .feed-count b { font-variant-numeric: tabular-nums; }
+    .feed-count.on { color: var(--accent-dark); }
+    .feed-chip {
+      background: var(--accent-tint); color: var(--accent-dark);
+      border: 1px solid color-mix(in srgb, var(--accent) 25%, #fff);
+      border-radius: 999px; padding: 1px 9px; animation: hint-in .22s ease both;
+      font: inherit; font-size: 12px; cursor: pointer; appearance: none; -webkit-appearance: none;
+    }
+    .feed-chip:hover { background: color-mix(in srgb, var(--accent) 18%, #fff); border-color: var(--accent); }
+    .feed-x { font-size: 14px; line-height: 1; margin-left: 2px; }
+    .feed-clear {
+      margin-left: auto; appearance: none; -webkit-appearance: none; cursor: pointer;
+      background: var(--surface); color: var(--accent-dark); font: inherit; font-size: 12px; font-weight: 600;
+      border: 1px solid var(--border); border-radius: 999px; padding: 2px 11px;
+    }
+    .feed-clear:hover { background: var(--accent-tint); border-color: var(--accent); }
+    .feed-group { font-weight: 600; text-transform: uppercase; font-size: 10.5px; letter-spacing: .4px; margin-right: 2px; }
     .mode-tabs.mode-tabs-field .mode-indicator {
       top: 3px; bottom: 3px;
       background: var(--sand);
@@ -163,7 +194,7 @@
        hypothetical height exceed the viewport, flex shrink kicks in and
        squeezes the siblings (first of all the mode tab row) — the two columns
        scroll internally instead, which is what the overflow rules below do. */
-    .layout { flex: 1 1 0; min-height: 0; display: flex; gap: 28px; margin-top: 24px; padding: 0 0 16px; }
+    .layout { flex: 1 1 0; min-height: 0; display: flex; gap: 28px; margin-top: 12px; padding: 0 0 16px; }
     .col-filters { flex: 0 0 24%; min-width: 0; overflow-y: auto; overscroll-behavior: contain; padding-right: 4px; }
     .col-results { flex: 1 1 auto; min-width: 0; overflow-y: auto; }
     .panel-title { margin: 0 2px 4px; font-family: var(--serif); font-size: 18px; font-weight: 600; color: var(--ink); }
@@ -172,7 +203,32 @@
     .filter-panel {
       padding: 12px 14px 6px; background: var(--surface); border: 1px solid var(--card-border); border-radius: 8px;
     }
+    /* The three collapsible panels (Standard / Specific / Experimental). Their
+       titles are solid header bands with a chevron, so they read as containers
+       and not as one more filter row (those use a small caps label + triangle). */
+    .filter-panel { margin-bottom: 10px; padding: 0 0 4px; overflow: hidden; }
+    .filter-panel > details { margin: 0 14px; }
+    .panel-summary {
+      list-style: none; cursor: pointer; user-select: none; padding: 11px 14px;
+      background: var(--sand); border-bottom: 1px solid transparent;
+      font-family: var(--serif); font-size: 16px; font-weight: 600; color: var(--ink);
+      display: flex; justify-content: space-between; align-items: center;
+    }
+    .filter-panel:not([open]) { padding-bottom: 0; }
+    .filter-panel[open] > .panel-summary { border-bottom-color: var(--card-border); margin-bottom: 2px; }
+    .panel-summary:hover { background: color-mix(in srgb, var(--sand) 70%, var(--border)); }
+    .panel-summary::-webkit-details-marker { display: none; }
+    /* Chevron (not a triangle): points down when closed, up when open. */
+    .panel-summary::after {
+      content: ""; width: 7px; height: 7px; margin: -3px 2px 0 8px;
+      border-right: 2px solid var(--muted); border-bottom: 2px solid var(--muted);
+      transform: rotate(45deg); transition: transform .2s, margin .2s;
+    }
+    .filter-panel[open] > .panel-summary::after { transform: rotate(225deg); margin-top: 3px; }
+    .filter-panel.active > .panel-summary { background: var(--accent-tint); color: var(--accent-dark); }
     .filter-group { border-top: 1px solid var(--card-border); }
+    /* A section that currently narrows the results gets a very light green wash. */
+    .filter-group.active { background: color-mix(in srgb, var(--accent) 6%, #fff); box-shadow: -4px 0 0 color-mix(in srgb, var(--accent) 6%, #fff), 4px 0 0 color-mix(in srgb, var(--accent) 6%, #fff); }
     .filter-group summary {
       list-style: none; cursor: pointer; user-select: none;
       font-size: 12px; color: var(--muted); text-transform: uppercase; letter-spacing: .7px; font-weight: 600;
@@ -202,6 +258,19 @@
       display: flex; align-items: center; gap: 10px; font-size: 15px; cursor: pointer;
       padding: 7px 0; color: var(--ink);
     }
+    /* Filter entry: a plain list row, no tick box. Nothing selected = all
+       shown; a selected row (tinted, bold) narrows the results to ONLY the
+       selected rows. Include also rows work the same: selected = shown. */
+    .opt {
+      display: flex; align-items: center; gap: 10px; width: 100%; text-align: left;
+      appearance: none; -webkit-appearance: none; border: 0; background: transparent;
+      font: inherit; font-size: 15px; color: var(--ink); cursor: pointer;
+      padding: 6px 8px; margin: 1px 0; border-radius: 6px;
+    }
+    .opt:hover { background: var(--sand); }
+    .opt.sel { background: var(--accent-tint); color: var(--accent-dark); font-weight: 600; }
+    .opt:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+    .opt-n { font-weight: 400; color: var(--muted); }
     .chk input { width: 16px; height: 16px; accent-color: var(--accent); cursor: pointer; }
     /* Two-line filter label: category + smaller description line */
     .chk-text { display: flex; flex-direction: column; line-height: 1.3; }
