@@ -199,7 +199,7 @@ export const STRATEGY_ENTRIES = [
 // results summary, `hint` the layer-3 line while this field is selected.
 export const FIELD_ENTRIES = [
   { value: 'keywords', label: 'On complete metadata', short: 'complete metadata',
-    hint: 'Keyword-based search in the inner text: abstract, findings, recommendations, indications and gaps' },
+    hint: 'Keyword-based search in the inner text: abstract, findings, indications and gaps' },
   { value: 'title',    label: 'Titles only',  short: 'titles',
     hint: 'Search based on matching words in the titles' },
   { value: 'author',   label: 'Authors only', short: 'authors',
